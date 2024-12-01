@@ -48,10 +48,10 @@ EOD;
         }
         print <<< EOD
 [1mPURPOSE: [0;33m
-Operates on [1;34mwsjtx_log.adi[0;33m file located in [1;34mWSJT-X[0;33m data folder.
+  Operates on [1;34mwsjtx_log.adi[0;33m file located in [1;34mWSJT-X[0;33m data folder.
 
 [1mARGUMENTS: [0;33m
-System takes two args: Park Code - [1;34mCA-1368[0;33m, and 8-char GSQ value - [1;36mFN03FV82[0;33m.
+  System takes two args: Park Code - [1;34mCA-1368[0;33m, and 8-char GSQ value - [1;36mFN03FV82[0;33m.
 
 [1mOPERATION: [0;33m
   1 System asks the user to confirm the operation that is about to take place.
@@ -65,15 +65,19 @@ System takes two args: Park Code - [1;34mCA-1368[0;33m, and 8-char GSQ value -
 
   3 Updates all [1mMY_GRIDSQUARE[0;33m values with supplied 8-character GSQ value.
 
-  4 Populates new [1mMY_CITY[0;33m column populated with Park name obtained by looking up supplied Park ID.
+  4 Populates new [1mMY_CITY[0;33m column using data obtained by looking up supplied Park ID at POTA.
 
   5 Contacts QRZ API service to obtain any missing [1mGRIDSQUARE[0;33m values as needed.
 
 [1mCONFIGURATION: [0;33m
-User Configuration is by means of the [1;34mpotashell.ini[0;33m file located in this directory.
+  User Configuration is by means of the [1;34mpotashell.ini[0;33m file located in this directory.
 
 [1mSYNTAX: [0;1;37m
-potashell[0;33m [1;34mCA-1368[0;33m [1;36mFN03FV82[0;33m
+  potashell[0;33m [1;34mCA-1368[0;33m [1;36mFN03FV82[0;33m
+
+ - If either argument is omitted, system will prompt for it.
+ - If BOTH arguments are omitted, help will be shown.
+
 [0m
 
 EOD;
