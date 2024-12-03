@@ -23,6 +23,7 @@ class PS {
     private $fileAdifPark;
     private $fileAdifWsjtx;
     private $GSQ;
+    private $parkName;
     private $pathAdifLocal;
     private $potaId;
 
@@ -35,9 +36,7 @@ class PS {
         $this->checkPhp();
         $this->loadIni();
         $this->getCliArgs();
-        $this->step1();
-        // print "\n" . print_r([$this->potaId,$this->GSQ], true) . "\n";
-        // print "Hello World - this is PHP " . phpversion() . "\n";
+        $this->process();
     }
 
     private function checkPhp() {
@@ -63,6 +62,7 @@ class PS {
         } else {
             print PS::GREEN_BD . "  - Supplied Gridsquare:" . PS::CYAN_BD . "                   " . $this->GSQ . "\n";
         }
+        $this->parkName = "POTA: " . $this->potaId . " and name goes here";
         print "\n" . PS::RESET;
     }
 
@@ -125,7 +125,7 @@ class PS {
         $this->pathAdifLocal = rtrim($this->config['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
     }
 
-    private function step1() {
+    private function process() {
         print PS::YELLOW_BD . "STATUS:\n";
         if (!$this->potaId || !$this->GSQ) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
@@ -194,19 +194,22 @@ class PS {
             $response = strToUpper(trim(fgets($fin)));
 
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD;
-
             if ($response === 'Y') {
                 print "  - Renamed existing log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-                    . " to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n";
+                    . " to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
+                    . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values to " . PS::CYAN_BD . $this->GSQ . PS::GREEN_BD . ".\n"
+                    . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::CYAN_BD . $this->parkName . PS::GREEN_BD . ".\n"
+                ;
+
+                // This is where James needs to be BRILLIANT - like burping the theme for "The Muppets"
+                // Write the data structure contained in $data1 back to an ADIF file format.
+                // That'll be in the adif class below.
             } else {
                 print "    Operation cancelled.\n";
             }
             print PS::RESET;
             die(0);
-
         }
-        print $this->fileAdifPark . ($fileAdifParkExists ? " is present" : " does not exist.") . "\n";
-        print $this->fileAdifWsjtx . ($fileAdifWsjtxExists ? " is present" : " does not exist.") . "\n";
     }
 }
 
@@ -216,7 +219,7 @@ class adif {
      *
      * ADIFデータを解析して、配列に展開する。
      *
-     * PHP versions 5
+     * PHP versions 5-8
      *
      * Licensed under The MIT License
      * Redistributions of files must retain the above copyright notice.
@@ -227,6 +230,7 @@ class adif {
      * @author        Mune Ando
      * @copyright     Copyright 2012, Mune Ando (http://wwww.5cho-me.com/)
      * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
+     * @repo          https://github.com/muneando/php-adif
      */
     private $data;
     private $records = [];
@@ -328,6 +332,10 @@ class adif {
             $datas[] = $data;
         }
         return $datas;
+    }
+
+    public function toAdif($data) {
+        // Clever stuff by James goes here
     }
 
     protected function strlen($string) {
