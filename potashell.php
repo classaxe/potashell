@@ -184,6 +184,7 @@ class PS {
         if ($fileAdifWsjtxExists) {
             $adif1 = new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
             $data1 = $adif1->parser();
+
             print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
                 . " exists and contains " . PS::MAGENTA_BD . count($data1) . PS::GREEN_BD . " entries.\n"
                 . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " does NOT exist.\n\n"
@@ -335,7 +336,32 @@ class adif {
     }
 
     public function toAdif($data) {
-        // Clever stuff by James goes here
+        
+        // construct an adif string out of data
+        // construct header, (copied from an adif file)
+
+        $output = <<<HHH
+ADIF Export from ADIFMaster v[3.5]
+http://www.dxshell.com
+Copyright (C) 2005 - 2023 UU0JC, DXShell.com
+File generated on 02 Dec, 2024 at 22:49
+<ADIF_VER:5>3.1.4
+<PROGRAMID:10>ADIFMaster
+<PROGRAMVERSION:3>3.5
+<EOH>
+HHH;
+        
+        // construct records
+        // format seems to be <FIELD_NAME:DATALENGTH>DATA*space* (more fields) <eor>
+
+        foreach($data as $row) {
+            foreach ($row as $key => $value) {
+                $output .=  "<" . $key . ":" . strlen($value) . "> " . $value;
+            }
+            $output .= "<eor>\r\n";
+        }
+
+        return $output;
     }
 
     protected function strlen($string) {
