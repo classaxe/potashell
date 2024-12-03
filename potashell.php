@@ -356,7 +356,7 @@ HHH;
 
         foreach($data as $row) {
             foreach ($row as $key => $value) {
-                $output .=  "<" . $key . ":" . strlen($value) . "> " . $value;
+                $output .=  "<" . $key . ":" . strlen($value) . ">" . $value . " ";
             }
             $output .= "<eor>\r\n";
         }
