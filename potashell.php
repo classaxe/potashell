@@ -26,9 +26,11 @@ class PS {
     private $parkName;
     private $pathAdifLocal;
     private $potaId;
+    private $version;
 
     public function __construct() {
         global $argv;
+        $this->version = exec('git describe --tags');
         $this->potaId = $argv[1] ?? null;
         $this->GSQ = $argv[2] ?? null;
         $this->header();
@@ -56,13 +58,13 @@ class PS {
             print PS::GREEN_BD . "  - Supplied POTA Park ID:" . PS::BLUE_BD . "                 " . $this->potaId . "\n";
         }
         if ($this->GSQ === null) {
-            print PS::GREEN_BD . "  - Please provide POTA 8-char Gridsquare: " . PS::CYAN_BD;
+            print PS::GREEN_BD . "  - Please provide POTA 8 or 10-char Gridsquare: " . PS::CYAN_BD;
             $fin = fopen("php://stdin","r");
             $this->GSQ = trim(fgets($fin));
         } else {
             print PS::GREEN_BD . "  - Supplied Gridsquare:" . PS::CYAN_BD . "                   " . $this->GSQ . "\n";
         }
-        $this->parkName = "POTA: " . $this->potaId . " and name goes here";
+        $this->parkName = "POTA: " . $this->potaId;
         print "\n" . PS::RESET;
     }
 
@@ -172,6 +174,10 @@ class PS {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD;
 
             if ($response === 'Y') {
+                rename(
+                    $this->pathAdifLocal . $this->fileAdifPark,
+                    $this->pathAdifLocal . $this->fileAdifWsjtx
+                );
                 print "    Renamed existing log file file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::BLUE_BD . PS::GREEN_BD
                     . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}\n";
             } else {
@@ -196,6 +202,19 @@ class PS {
 
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD;
             if ($response === 'Y') {
+                rename(
+                    $this->pathAdifLocal . $this->fileAdifWsjtx,
+                    $this->pathAdifLocal . $this->fileAdifPark
+                );
+                foreach ($data as &$record) {
+                    if (empty($record)) {
+                        continue;
+                    }
+                    $record['MY_GRIDSQUARE'] = $this->GSQ;
+                    $record['MY_CITY'] = $this->parkName;
+                }
+                $adif = $adif->toAdif($data, $this->version);
+                file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
                 print "  - Renamed existing log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
                     . " to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
                     . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values to " . PS::CYAN_BD . $this->GSQ . PS::GREEN_BD . ".\n"
@@ -264,7 +283,10 @@ class adif {
             }
         }
         $records = str_ireplace('<eor>', '<EOR>', $data);
-        $this->records = explode('<EOR>', $records);
+        $tmp = explode('<EOR>', $records);
+        $this->records = array_filter($tmp, function($record) {
+            return $record != '';
+        });
     }
 
     protected function loadData($data) {
@@ -335,21 +357,21 @@ class adif {
         return $datas;
     }
 
-    public function toAdif($data) {
+    public function toAdif($data, $version) {
         
         // construct an adif string out of data
         // construct header, (copied from an adif file)
 
-        $output = <<<HHH
-ADIF Export from ADIFMaster v[3.5]
-http://www.dxshell.com
-Copyright (C) 2005 - 2023 UU0JC, DXShell.com
-File generated on 02 Dec, 2024 at 22:49
-<ADIF_VER:5>3.1.4
-<PROGRAMID:10>ADIFMaster
-<PROGRAMVERSION:3>3.5
-<EOH>
-HHH;
+        $output =
+            "ADIF Export from POTASHELL\n"
+            . "https://github.com/classaxe/potashell\n"
+            . "Copyright (C) 2024, Martin Francis, James Fraser - classaxe.com\n"
+            . "File generated on " . date('Y-m-d \a\t H:m:s') ."\n"
+            . "<ADIF_VER:5>3.1.4\n"
+            . "<PROGRAMID:9>POTAShell\n"
+            . "<PROGRAMVERSION:" . strlen($version) . ">" . $version ."\n"
+            . "<EOH>\n"
+            . "\n";
         
         // construct records
         // format seems to be <FIELD_NAME:DATALENGTH>DATA*space* (more fields) <eor>
@@ -386,6 +408,11 @@ HHH;
         }
         return mb_substr($string, $start, $length, 'utf-8');
     }
+}
+
+function dd($var) {
+    print "<pre>". print_r($var, true) ."</pre>";
+    exit;
 }
 
 new PS();
