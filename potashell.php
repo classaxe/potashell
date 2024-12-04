@@ -182,11 +182,11 @@ class PS {
         }
 
         if ($fileAdifWsjtxExists) {
-            $adif1 = new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
-            $data1 = $adif1->parser();
+            $adif = new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
+            $data = $adif->parser();
 
             print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-                . " exists and contains " . PS::MAGENTA_BD . count($data1) . PS::GREEN_BD . " entries.\n"
+                . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
                 . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " does NOT exist.\n\n"
                 . PS::YELLOW_BD . "CHOICE:\n"
                 . PS::GREEN_BD . "    Rename " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD

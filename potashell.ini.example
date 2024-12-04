@@ -1,0 +1,5 @@
+; This is a sample configuration file for potashell
+; Copy this file to potashell.ini, and modify it to suit your own needs
+
+[WSJTX]
+log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
