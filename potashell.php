@@ -41,6 +41,7 @@ class PS {
     private $fileAdifWsjtx;
     private $GSQ;
     private $parkName;
+    private $parkNameAbbr;
     private $pathAdifLocal;
     private $potaId;
     private $version;
@@ -73,21 +74,20 @@ class PS {
     private function getCliArgs() {
         print PS::YELLOW_BD . "ARGUMENTS:\n";
         if ($this->potaId === null) {
-            print PS::GREEN_BD . "  - Please provide POTA Park ID:" . PS::BLUE_BD . "           ";
+            print PS::GREEN_BD . "  - Please provide POTA Park ID:  " . PS::BLUE_BD;
             $fin = fopen("php://stdin","r");
             $this->potaId = trim(fgets($fin));
         } else {
-            print PS::GREEN_BD . "  - Supplied POTA Park ID:" . PS::BLUE_BD . "                 " . $this->potaId . "\n";
+            print PS::GREEN_BD . "  - Supplied POTA Park ID:        " . PS::BLUE_BD . $this->potaId . "\n";
         }
         if ($this->GSQ === null) {
-            print PS::GREEN_BD . "  - Please provide POTA 8 or 10-char Gridsquare: " . PS::CYAN_BD;
+            print PS::GREEN_BD . "  - Please provide 8/10-char GSQ: " . PS::CYAN_BD;
             $fin = fopen("php://stdin","r");
             $this->GSQ = trim(fgets($fin));
         } else {
-            print PS::GREEN_BD . "  - Supplied Gridsquare:" . PS::CYAN_BD . "                   " . $this->GSQ . "\n";
+            print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->GSQ . "\n";
         }
         $this->parkName = "POTA: " . $this->potaId;
-        print "\n" . PS::RESET;
     }
 
 //    private function getParkName() {
@@ -111,10 +111,13 @@ class PS {
     private function getParkName() {
         $url = "https://api.pota.app/park/" . trim($this->potaId);
         $data = json_decode(file_get_contents($url));
-        $this->parkName = strtr(
-            "POTA: " . $this->potaId . " " . trim($data->name) . ' ' . trim($data->parktypeDesc),
-            PS::NAME_SUBS
-        );
+        if (!$data) {
+            print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->potaId}.\n" . PS::RESET;
+            die(0);
+        }
+        $this->parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
+        $this->parkNameAbbr = strtr("POTA: " . $this->potaId . " " . $this->parkName, PS::NAME_SUBS);
+        print PS::GREEN_BD . "  - Identified Park:              " . PS::RED_BD . $this->parkName . "\n\n";
     }
 
     private function header() {
@@ -214,9 +217,10 @@ class PS {
             print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
                 . " exists and contains " . PS::MAGENTA_BD . count($data1) . PS::GREEN_BD . " entries.\n"
                 . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " does NOT exist.\n\n"
-                . PS::YELLOW_BD . "CHOICE:\n"
-                . PS::GREEN_BD . "    Rename file to " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-                . " and resume logging at park " . PS::BLUE_BD . "{$this->potaId}" . PS::GREEN_BD . "? (Y/N) ";
+                . PS::YELLOW_BD . "OPERATION:\n"
+                . PS::GREEN_BD . "  - Rename archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " to " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD ."\n"
+                . "  - Resume logging at park " . PS::RED_BD . "{$this->parkName}" . PS::GREEN_BD . "\n\n"
+                . PS::YELLOW_BD . "CHOICE:\n" . PS::GREEN_BD . "    Continue with operation? (Y/N) ";
             $fin = fopen("php://stdin","r");
             $response = strToUpper(trim(fgets($fin)));
 
@@ -227,8 +231,11 @@ class PS {
                     $this->pathAdifLocal . $this->fileAdifPark,
                     $this->pathAdifLocal . $this->fileAdifWsjtx
                 );
-                print "    Renamed existing log file file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::BLUE_BD . PS::GREEN_BD
-                    . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}\n";
+                print "    Renamed archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
+                    . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}" . PS::GREEN_BD . "\n\n"
+                    . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
+                    . "    You may resume logging at " . PS::RED_BD . "{$this->parkName}\n\n"
+                    . PS::RESET;
             } else {
                 print "    Operation cancelled.\n";
             }
@@ -243,13 +250,14 @@ class PS {
             print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
                 . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
                 . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " does NOT exist.\n\n"
-                . PS::YELLOW_BD . "CHOICE:\n"
-                . PS::GREEN_BD . "  - Rename " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-                . " to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n"
-                . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . " to " . PS::CYAN_BD . "{$this->GSQ}" . PS::GREEN_BD . "\n"
-                . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "       to " . PS::CYAN_BD . "{$this->parkName}" . PS::GREEN_BD . "\n"
+                . PS::YELLOW_BD . "OPERATION:\n"
+                . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
+                . "   to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n"
+                . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->GSQ}" . PS::GREEN_BD . "\n"
+                . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "                      to " . PS::RED_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
                 . "\n"
-                . "    Proceed with operation? (Y/N) ";
+                . PS::YELLOW_BD . "CHOICE:\n"
+                . PS::GREEN_BD . "    Proceed with operation? (Y/N) ";
             $fin = fopen("php://stdin","r");
             $response = strToUpper(trim(fgets($fin)));
 
@@ -264,19 +272,17 @@ class PS {
                         continue;
                     }
                     $record['MY_GRIDSQUARE'] = $this->GSQ;
-                    $record['MY_CITY'] = $this->parkName;
+                    $record['MY_CITY'] = $this->parkNameAbbr;
                 }
                 $adif = $adif->toAdif($data, $this->version);
                 file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
-                print "  - Renamed existing log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-                    . " to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
-                    . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values to " . PS::CYAN_BD . $this->GSQ . PS::GREEN_BD . ".\n"
-                    . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::CYAN_BD . $this->parkName . PS::GREEN_BD . ".\n"
-                ;
-
-                // This is where James needs to be BRILLIANT - like burping the theme for "The Muppets"
-                // Write the data structure contained in $data1 back to an ADIF file format.
-                // That'll be in the adif class below.
+                print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
+                    . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
+                    . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->GSQ . PS::GREEN_BD . ".\n"
+                    . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::RED_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n\n"
+                    . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
+                    . "  - You may continue logging at another park where a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
+                    . "  - Alternatively, run this script again with a new POTA Park ID to resume logging at a previously visited park.\n";
             } else {
                 print "    Operation cancelled.\n";
             }
