@@ -19,6 +19,23 @@ class PS {
     const RESPONSE_N =  "[1;41m N [0;33m";
     const RESET =       "[0m";
 
+    const NAME_SUBS = [
+        'Conservation Area' =>          'CA',
+        'Conservation Park' =>          'CP',
+        'Conservation Reserve' =>       'CR',
+        'District Park' =>              'DP',
+        'for Conservation' =>           'for Cons',
+        'National Historic Site' =>     'NHS',
+        'National Park' =>              'NP',
+        'National Recreation Trail' =>  'NRT',
+        'Point' =>                      'Pt',
+        'Provincial Nature Reserve' =>  'PNR',
+        'Provincial Park' =>            'PP',
+        'Recreation Park' =>            'Rec P',
+        'Regional Park' =>              'Reg P',
+        'Wilderness Park' =>            'WP',
+    ];
+
     private $config;
     private $fileAdifPark;
     private $fileAdifWsjtx;
@@ -38,12 +55,17 @@ class PS {
         $this->checkPhp();
         $this->loadIni();
         $this->getCliArgs();
+        $this->getParkName();
         $this->process();
     }
 
     private function checkPhp() {
         if (!extension_loaded('mbstring')) {
             print PS::RED_BD . "ERROR:\n  PHP mbstring extension is not available.\n" . PS::RESET;
+            die(0);
+        }
+        if (!extension_loaded('openssl')) {
+            print PS::RED_BD . "ERROR:\n  PHP OpenSSL extension is not available.\n" . PS::RESET;
             die(0);
         }
     }
@@ -66,6 +88,33 @@ class PS {
         }
         $this->parkName = "POTA: " . $this->potaId;
         print "\n" . PS::RESET;
+    }
+
+//    private function getParkName() {
+//        $parkNames = explode(",", "POTA: CA-6357 Thornton Bales CA,POTA: CA-6358 Whitchurch Cons Area");
+//        $parks = explode(",", "CA-6357,CA-6358");
+//        foreach ($parks as $idx => $park) {
+//            $url = "https://api.pota.app/park/" . trim($parks[$idx]);
+//            $data = json_decode(file_get_contents($url));
+//            $name = strtr(
+//                "POTA: " . $parks[$idx] . " " . trim($data->name) . ' ' . trim($data->parktypeDesc),
+//                PS::NAME_SUBS
+//            );
+//            $test = $parkNames[$idx];
+//            if (strtoupper($name) === strtoupper($test)) {
+//                continue;
+//            }
+//            print $name . "\n" . $test . "\n\n";
+//        }
+//    }
+
+    private function getParkName() {
+        $url = "https://api.pota.app/park/" . trim($this->potaId);
+        $data = json_decode(file_get_contents($url));
+        $this->parkName = strtr(
+            "POTA: " . $this->potaId . " " . trim($data->name) . ' ' . trim($data->parktypeDesc),
+            PS::NAME_SUBS
+        );
     }
 
     private function header() {
@@ -195,8 +244,12 @@ class PS {
                 . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
                 . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " does NOT exist.\n\n"
                 . PS::YELLOW_BD . "CHOICE:\n"
-                . PS::GREEN_BD . "    Rename " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-                . " to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " and update my location fields? (Y/N) ";
+                . PS::GREEN_BD . "  - Rename " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
+                . " to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n"
+                . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . " to " . PS::CYAN_BD . "{$this->GSQ}" . PS::GREEN_BD . "\n"
+                . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "       to " . PS::CYAN_BD . "{$this->parkName}" . PS::GREEN_BD . "\n"
+                . "\n"
+                . "    Proceed with operation? (Y/N) ";
             $fin = fopen("php://stdin","r");
             $response = strToUpper(trim(fgets($fin)));
 
