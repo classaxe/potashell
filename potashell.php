@@ -1,6 +1,7 @@
 #!/usr/bin/php
 <?php
 class PS {
+    const USERAGENT =   "POTASHELL v%s | https://github.com/classaxe/potashell | Copyright (C) %s Martin Francis VA3PHP";
     const RED =         "[0;31m";
     const RED_BD =      "[1;31m";
     const GREEN =       "[0;32m";
@@ -15,8 +16,9 @@ class PS {
     const CYAN_BD =     "[1;36m";
     const WHITE =       "[0;37m";
     const WHITE_BD =    "[1;37m";
-    const RESPONSE_Y =  "[1;42m Y [0;33m";
-    const RESPONSE_N =  "[1;41m N [0;33m";
+    const RESPONSE_Y =  "[0;33;1;42m Y [0;33m";
+    const RESPONSE_N =  "[0;33;1;41m N [0;33m";
+    const CLS =         "[H[J";
     const RESET =       "[0m";
 
     const NAME_SUBS = [
@@ -39,7 +41,9 @@ class PS {
     private $config;
     private $fileAdifPark;
     private $fileAdifWsjtx;
+    private $FIX;
     private $GSQ;
+    private $HTTPcontext;
     private $parkName;
     private $parkNameAbbr;
     private $pathAdifLocal;
@@ -49,14 +53,15 @@ class PS {
     public function __construct() {
         global $argv;
         $this->version = exec('git describe --tags');
+        $this->getHTTPContext();
         $this->potaId = $argv[1] ?? null;
         $this->GSQ = $argv[2] ?? null;
+        $this->FIX = strtoupper($argv[3]) === 'FIX';
         $this->header();
         $this->help();
         $this->checkPhp();
         $this->loadIni();
         $this->getCliArgs();
-        $this->getParkName();
         $this->process();
     }
 
@@ -87,6 +92,9 @@ class PS {
         } else {
             print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->GSQ . "\n";
         }
+        if ($this->FIX) {
+            print PS::GREEN_BD . "  - FIX operation specified:      " . PS::RESPONSE_Y . "\n";
+        }
         $this->parkName = "POTA: " . $this->potaId;
     }
 
@@ -110,7 +118,8 @@ class PS {
 
     private function getParkName() {
         $url = "https://api.pota.app/park/" . trim($this->potaId);
-        $data = json_decode(file_get_contents($url));
+        $data = file_get_contents($url, false, $this->HTTPcontext);
+        $data = json_decode($data);
         if (!$data) {
             print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->potaId}.\n" . PS::RESET;
             die(0);
@@ -121,6 +130,9 @@ class PS {
     }
 
     private function header() {
+        if (!$this->FIX) {
+            print PS::CLS;
+        }
         print PS::YELLOW
             . "**************\n"
             . "* POTA SHELL *\n"
@@ -137,6 +149,8 @@ class PS {
             . "\n"
             . PS::YELLOW_BD ."ARGUMENTS:" . PS::YELLOW ."\n"
             . "  System takes two args: Park Code - " . PS::BLUE_BD . "CA-1368" . PS::YELLOW .", and 8-char GSQ value - " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . ".\n"
+            . "  If you optionally provide a third argument of " . PS::RED_BD . "FIX" . PS::YELLOW .", the archived log file for that park,\n"
+            . "  e.g. " . PS::BLUE_BD . "wsjtx_log_CA-1368.adi" . PS::YELLOW .", will be augmented in place and resaved.\n"
             . "\n"
             . PS::YELLOW_BD . "OPERATION:" . PS::YELLOW ."\n"
             . "  1 System asks the user to confirm the operation that is about to take place.\n"
@@ -158,9 +172,10 @@ class PS {
             . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n"
             . "\n"
             . PS::YELLOW_BD . "SYNTAX:" . PS::WHITE_BD . "\n"
-            . "  potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW ."\n"
-            . "  - If either argument is omitted, system will prompt for it.\n"
-            . "  - If BOTH arguments are omitted, help will be shown.\n"
+            . "  potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::MAGENTA_BD . "FIX" . PS::YELLOW . "\n"
+            . "  - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
+            . "  - If optional " . PS::MAGENTA_BD . "FIX" . PS::YELLOW . " argument is given, system will immediately operate in-place on the\n"
+            . "    correct Park Log file.\n"
             . "\n"
             . str_repeat('-', 90) . PS::RESET ."\n\n";
 ;
@@ -180,16 +195,35 @@ class PS {
     }
 
     private function process() {
-        print PS::YELLOW_BD . "STATUS:\n";
+        print "\n" . PS::YELLOW_BD . "STATUS:\n";
         if (!$this->potaId || !$this->GSQ) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
                 . "    Unable to continue.\n" . PS::RESET;
             die(0);
         }
+        $this->getParkName();
         $this->fileAdifPark =   "wsjtx_log_{$this->potaId}.adi";
         $this->fileAdifWsjtx =  "wsjtx_log.adi";
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
+
+        if ($fileAdifParkExists && $this->FIX) {
+            $adif = new adif($this->pathAdifLocal . $this->fileAdifPark);
+            $data = $adif->parser();
+            foreach ($data as &$record) {
+                if (empty($record)) {
+                    continue;
+                }
+                $record['MY_GRIDSQUARE'] = $this->GSQ;
+                $record['MY_CITY'] = $this->parkNameAbbr;
+            }
+            $adif = $adif->toAdif($data, $this->version);
+            file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
+            print PS::YELLOW_BD . "RESULT:\n" . PS::GREEN_BD
+                . "    File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " with " . PS::CYAN_BD . count($data) . PS::GREEN_BD . " records has been fixed." . PS::RESET. "\n";
+            exit;
+        }
+
         if ($fileAdifParkExists && $fileAdifWsjtxExists) {
             $adif1 = new adif($this->pathAdifLocal . $this->fileAdifPark);
             $data1 = $adif1->parser();
@@ -289,6 +323,15 @@ class PS {
             print PS::RESET;
             die(0);
         }
+    }
+
+    private function getHTTPContext() {
+        $this->HTTPcontext = stream_context_create([
+            'http'=> [
+                'method'=>"GET",
+                'header'=>"User-Agent: " . sprintf(PS::USERAGENT, $this->version, date('Y')) . "\r\n"
+            ]
+        ]);
     }
 }
 
@@ -439,7 +482,7 @@ class adif {
             foreach ($row as $key => $value) {
                 $output .=  "<" . $key . ":" . $this->strlen($value) . ">" . $value . " ";
             }
-            $output .= "<eor>\r\n";
+            $output .= "<EOR>\r\n";
         }
 
         return $output;
