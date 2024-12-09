@@ -1,6 +1,7 @@
 #!/usr/bin/php
 <?php
 class PS {
+    const ACTIVATION_LOGS = 10;
     const USERAGENT =   "POTASHELL v%s | https://github.com/classaxe/potashell | Copyright (C) %s Martin Francis VA3PHP";
     const RED =         "[0;31m";
     const RED_BD =      "[1;31m";
@@ -85,6 +86,16 @@ class PS {
         $dates = array_keys($dates);
         sort($dates);
         return $dates;
+    }
+
+    private static function dataGetMyGrid($data) {
+        $gsqs = [];
+        foreach ($data as $d) {
+            $gsqs[$d['MY_GRIDSQUARE']] = true;
+        }
+        $gsqs = array_keys($gsqs);
+        sort($gsqs);
+        return $gsqs;
     }
 
     private static function dataCountActivations($data) {
@@ -312,27 +323,26 @@ class PS {
         print PS::GREEN_BD . "Performing Audit on all POTA Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
-        print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD;
         if (!$files) {
-            print "No log files found." .  PS::RESET . "\n";
+            print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
             return;
         }
-        print
-            "KEY:\n"
-            . "  #LS = Logs for latest session - excluding duplicates\n"
-            . "  #LT = Logs in total - exclusing duplicates\n"
+        print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
+            . "  #LS = Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
+            . "  #LT = Logs in total - excluding duplicates\n"
             . "  #MG = Missing Grid Squares\n"
-            . "  #SA = Successfull Activations\n"
+            . "  #SA = Successful Activations\n"
             . "  #FA = Failed Activations\n"
             . "  #ST = Sessions in Total\n"
-            . "\n" . str_repeat('-', 80) . "\n"
-            . "POTA ID | #LS | #LT | #MG | #SA | #FA | #ST | Park Name in Log File\n"
-            . str_repeat('-', 80) . "\n";
+            . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
+            . str_repeat('-', 90) . "\n"
+            . "POTA ID | MY_GRID    | #LS | #LT | #MG | #SA | #FA | #ST | Park Name in Log File\n"
+            . str_repeat('-', 90) . "\n";
         $i = 0;
         foreach ($files as $file) {
             if (is_file($file)) {
                 if ($i++ > 4) {
-                    // continue;
+                    //continue;
                 }
                 $fn =       basename($file);
                 $parkId =   explode('.', explode('_', $fn)[2])[0];
@@ -340,6 +350,7 @@ class PS {
 
                 $adif =     new adif($file);
                 $data =     $adif->parser();
+                $MY_GRID =  PS::dataGetMyGrid($data);
                 $dates =    PS::dataGetDates($data);
                 $date =     end($dates);
                 $LS =       PS::dataCountLogs($data, $date);
@@ -349,17 +360,21 @@ class PS {
                 $AT =       PS::dataCountActivations($data);
                 $FT =       $ST - $AT;
                 print
-                    PS::CYAN_BD . $parkId . PS::GREEN_BD . " | "
-                    . str_pad($LS, 3, ' ', STR_PAD_LEFT) . " | "
+                    PS::BLUE_BD . $parkId . PS::GREEN_BD . " | "
+                    . (count($MY_GRID) === 1 ?
+                        PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
+                        PS::RED_BD . str_pad("ERROR - " . count($MY_GRID), 10, ' ')
+                      ) . PS::GREEN_BD . " | "
+                    . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
                     . str_pad($LT, 3, ' ', STR_PAD_LEFT) . " | "
                     . PS::YELLOW_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
                     . str_pad($AT, 3, ' ', STR_PAD_LEFT) . " | "
                     . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
                     . str_pad($ST, 3, ' ', STR_PAD_LEFT) . " | "
-                    . PS::BLUE_BD . $lookup['abbr'] . "\n";
+                    . PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD . "\n";
             }
         }
-        print str_repeat('-', 80) . PS::RESET . "\n";
+        print str_repeat('-', 90) . PS::RESET . "\n";
     }
 
     private function processParkArchiving() {
