@@ -3,3 +3,10 @@
 
 [WSJTX]
 log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
+
+[QRZ]
+; QRZ.com XML Data subscribers can put their callsign and password below
+; for automatic lookups for any missing gridsquares seen in POTA Logfiles
+; Uncomment the lines below and provide your own values to use this feature.
+; callsign = "A12BCD";
+; password = "S3cret";

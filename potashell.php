@@ -50,6 +50,9 @@ class PS {
     private $parkNameAbbr;
     private $pathAdifLocal;
     private $potaId;
+    private $qrzPass;
+    private $qrzSession;
+    private $qrzUser;
     private $version;
 
     public function __construct() {
@@ -59,6 +62,7 @@ class PS {
         $this->loadIni();
         $this->getCliArgs();
         $this->header();
+        $this->checkQrz();
         if (!$this->AUDIT && $this->GSQ === null) {
             $this->help();
             $this->syntax();
@@ -78,24 +82,28 @@ class PS {
         }
     }
 
-    private static function dataGetDates($data) {
-        $dates = [];
-        foreach ($data as $d) {
-            $dates[$d['QSO_DATE']] = true;
+    private function checkQrz() {
+        if (empty($this->qrzUser) || empty($this->qrzPass)) {
+            print PS::RED_BD . "WARNING:\n  QRZ.com credentials are missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n\n" . PS::RESET;
+            return;
         }
-        $dates = array_keys($dates);
-        sort($dates);
-        return $dates;
-    }
-
-    private static function dataGetMyGrid($data) {
-        $gsqs = [];
-        foreach ($data as $d) {
-            $gsqs[$d['MY_GRIDSQUARE']] = true;
+        $url = sprintf(
+            "https://xmldata.qrz.com/xml/current/?username=%s;password=%s;agent=%s",
+            urlencode($this->qrzUser),
+            urlencode($this->qrzPass),
+            urlencode(PS::USERAGENT)
+        );
+        $xml = file_get_contents($url, false, $this->HTTPcontext);
+        $data = simplexml_load_string($xml);
+        if (!empty($data->Session->Error)) {
+            print PS::RED_BD . "ERROR:\n  QRZ.com reports " . PS::BLUE_BD . "\"" . trim($data->Session->Error) . "\"" . PS::RED_BD  ."\n\n" . PS::RESET;
+            return;
         }
-        $gsqs = array_keys($gsqs);
-        sort($gsqs);
-        return $gsqs;
+        if (empty($data->Session->Key)) {
+            print PS::RED_BD . "ERROR:\n  QRZ.com didn't return a valid session key, so no lookups are possible at this time.\n\n" . PS::RESET;
+            return;
+        }
+        $this->qrzSession = $data->Session->Key;
     }
 
     private static function dataCountActivations($data) {
@@ -125,7 +133,7 @@ class PS {
         return count($unique);
     }
 
-    private static function countMissingGsq($data) {
+    private static function dataCountMissingGsq($data) {
         $count = 0;
         foreach ($data as $d) {
             if (! isset($d['GRIDSQUARE']) || trim($d['GRIDSQUARE']) === '') {
@@ -133,6 +141,26 @@ class PS {
             }
         }
         return $count;
+    }
+
+    private static function dataGetDates($data) {
+        $dates = [];
+        foreach ($data as $d) {
+            $dates[$d['QSO_DATE']] = true;
+        }
+        $dates = array_keys($dates);
+        sort($dates);
+        return $dates;
+    }
+
+    private static function dataGetMyGrid($data) {
+        $gsqs = [];
+        foreach ($data as $d) {
+            $gsqs[$d['MY_GRIDSQUARE']] = true;
+        }
+        $gsqs = array_keys($gsqs);
+        sort($gsqs);
+        return $gsqs;
     }
 
     private function getCliArgs() {
@@ -148,6 +176,40 @@ class PS {
         $this->GSQ = $arg2;
         $this->FIX = strtoupper($arg3) === 'FIX';
     }
+
+    private function getGSQForCall($callsign) {
+        if (empty($this->qrzSession)) {
+            return false;
+        }
+        $url = sprintf(
+            "https://xmldata.qrz.com/xml/current/?s=%s;callsign=%s;agent=%s",
+            urlencode($this->qrzSession),
+            urlencode($callsign),
+            urlencode(PS::USERAGENT)
+        );
+        $xml = file_get_contents($url, false, $this->HTTPcontext);
+        $data = simplexml_load_string($xml);
+        if (empty($data->Callsign->grid)) {
+            print PS::RED_BD . "    WARNING: - No gridsquare found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
+        }
+        return $data->Callsign->grid ?? null;
+    }
+
+    private function getParkName($potaId) {
+        $url = "https://api.pota.app/park/" . trim($potaId);
+        $data = file_get_contents($url, false, $this->HTTPcontext);
+        $data = json_decode($data);
+        if (!$data) {
+            return false;
+        }
+        $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
+        $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
+        return [
+            'name' => $parkName,
+            'abbr' => $parkNameAbbr,
+        ];
+    }
+
     private function getUserArgs() {
         print PS::YELLOW_BD . "ARGUMENTS:\n";
         if ($this->potaId === null) {
@@ -168,39 +230,6 @@ class PS {
             print PS::GREEN_BD . "  - FIX operation specified:      " . PS::RESPONSE_Y . "\n";
         }
         $this->parkName = "POTA: " . $this->potaId;
-    }
-
-//    private function getParkName() {
-//        $parkNames = explode(",", "POTA: CA-6357 Thornton Bales CA,POTA: CA-6358 Whitchurch Cons Area");
-//        $parks = explode(",", "CA-6357,CA-6358");
-//        foreach ($parks as $idx => $park) {
-//            $url = "https://api.pota.app/park/" . trim($parks[$idx]);
-//            $data = json_decode(file_get_contents($url));
-//            $name = strtr(
-//                "POTA: " . $parks[$idx] . " " . trim($data->name) . ' ' . trim($data->parktypeDesc),
-//                PS::NAME_SUBS
-//            );
-//            $test = $parkNames[$idx];
-//            if (strtoupper($name) === strtoupper($test)) {
-//                continue;
-//            }
-//            print $name . "\n" . $test . "\n\n";
-//        }
-//    }
-
-    private function getParkName($potaId) {
-        $url = "https://api.pota.app/park/" . trim($potaId);
-        $data = file_get_contents($url, false, $this->HTTPcontext);
-        $data = json_decode($data);
-        if (!$data) {
-            return false;
-        }
-        $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
-        $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
-        return [
-            'name' => $parkName,
-            'abbr' => $parkNameAbbr,
-        ];
     }
 
     private function header() {
@@ -250,11 +279,15 @@ class PS {
             print PS::RED_BD . "ERROR:\n  Configuration file {$filename} is missing.\n" . PS::RESET;
             die(0);
         };
-        if (!$this->config = @parse_ini_file($filename)) {
+        if (!$this->config = @parse_ini_file($filename, true)) {
             print PS::RED_BD . "ERROR:\n  Unable to parse {$filename} file.\n" . PS::RESET;
             die(0);
         };
-        $this->pathAdifLocal = rtrim($this->config['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
+        $this->pathAdifLocal = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
+        if (!empty($this->config['QRZ']['callsign']) && !empty($this->config['QRZ']['password'])) {
+            $this->qrzUser = $this->config['QRZ']['callsign'];
+            $this->qrzPass = $this->config['QRZ']['password'];
+        }
     }
 
     private function process() {
@@ -355,7 +388,7 @@ class PS {
                 $date =     end($dates);
                 $LS =       PS::dataCountLogs($data, $date);
                 $LT =       PS::dataCountLogs($data);
-                $MG =       PS::countMissingGsq($data);
+                $MG =       PS::dataCountMissingGsq($data);
                 $ST =       count($dates);
                 $AT =       PS::dataCountActivations($data);
                 $FT =       $ST - $AT;
@@ -380,6 +413,8 @@ class PS {
     private function processParkArchiving() {
         $adif = new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
         $data = $adif->parser();
+        $MGs1 =  $this->dataCountMissingGsq($data);
+        $MGs2 =  $MGs1;
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
@@ -389,38 +424,50 @@ class PS {
             . "   to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n"
             . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->GSQ}" . PS::GREEN_BD . "\n"
             . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "                      to " . PS::RED_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
+            . ($MGs1 ? "  - Lookup " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : "")
             . "\n"
             . PS::YELLOW_BD . "CHOICE:\n"
             . PS::GREEN_BD . "    Proceed with operation? (Y/N) ";
+
         $fin = fopen("php://stdin","r");
         $response = strToUpper(trim(fgets($fin)));
-
         print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD;
-        if ($response === 'Y') {
-            rename(
-                $this->pathAdifLocal . $this->fileAdifWsjtx,
-                $this->pathAdifLocal . $this->fileAdifPark
-            );
-            foreach ($data as &$record) {
-                if (empty($record)) {
-                    continue;
-                }
-                $record['MY_GRIDSQUARE'] = $this->GSQ;
-                $record['MY_CITY'] = $this->parkNameAbbr;
-            }
-            $adif = $adif->toAdif($data, $this->version);
-            file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
-            print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-                . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
-                . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->GSQ . PS::GREEN_BD . ".\n"
-                . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::RED_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n\n"
-                . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
-                . "  - You may continue logging at another park where a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
-                . "  - Alternatively, run this script again with a new POTA Park ID to resume logging at a previously visited park.\n";
-        } else {
-            print "    Operation cancelled.\n";
+        if (strtoupper($response) !== 'Y') {
+            print "    Operation cancelled.\n" . PS::RESET;
+            return;
         }
-        print PS::RESET;
+
+        rename(
+            $this->pathAdifLocal . $this->fileAdifWsjtx,
+            $this->pathAdifLocal . $this->fileAdifPark
+        );
+        foreach ($data as &$record) {
+            if (empty($record)) {
+                continue;
+            }
+            if (empty($record['GRIDSQUARE'])) {
+                $record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL']);
+                if (!empty($record['GRIDSQUARE'])) {
+                    $MGs2 --;
+                }
+            }
+            $record['MY_GRIDSQUARE'] = $this->GSQ;
+            $record['MY_CITY'] = $this->parkNameAbbr;
+        }
+        $adif = $adif->toAdif($data, $this->version);
+        file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
+        print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
+            . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
+            . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->GSQ . PS::GREEN_BD . ".\n"
+            . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::RED_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n"
+            . ($MGs1 ? "  - Obtained " . PS::RED_BD . ($MGs2 ?
+                ($MGs1 - $MGs2) . " of " . $MGs1 : $MGs1) . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
+              )
+            . "\n"
+            . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
+            . "  - You may continue logging at another park where a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
+            . "  - Alternatively, run this script again with a new POTA Park ID to resume logging at a previously visited park.\n"
+            . PS::RESET;
     }
 
     private function processParkFix() {
@@ -429,6 +476,9 @@ class PS {
         foreach ($data as &$record) {
             if (empty($record)) {
                 continue;
+            }
+            if (empty($record['GRIDSQUARE'])) {
+                $record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL']);
             }
             $record['MY_GRIDSQUARE'] = $this->GSQ;
             $record['MY_CITY'] = $this->parkNameAbbr;
