@@ -39,17 +39,19 @@ class PS {
         'Wilderness Park' =>            'WP',
     ];
 
-    private $AUDIT;
     private $config;
     private $fileAdifPark;
     private $fileAdifWsjtx;
-    private $FIX;
-    private $GSQ;
+    private $modeAudit;
+    private $modeFix;
+    private $modeHelp;
+    private $inputGSQ;
     private $HTTPcontext;
     private $parkName;
     private $parkNameAbbr;
     private $pathAdifLocal;
-    private $potaId;
+    private $inputPotaId;
+    private $qrzApiKey;
     private $qrzPass;
     private $qrzSession;
     private $qrzUser;
@@ -63,8 +65,12 @@ class PS {
         $this->getCliArgs();
         $this->header();
         $this->checkQrz();
-        if (!$this->AUDIT && $this->GSQ === null) {
+        if ($this->modeHelp) {
             $this->help();
+            $this->syntax();
+            return;
+        }
+        if (!$this->modeAudit && $this->inputGSQ === null) {
             $this->syntax();
             $this->getUserArgs();
         }
@@ -101,9 +107,50 @@ class PS {
         }
         if (empty($data->Session->Key)) {
             print PS::RED_BD . "ERROR:\n  QRZ.com didn't return a valid session key, so no lookups are possible at this time.\n\n" . PS::RESET;
+        } else {
+            $this->qrzSession = $data->Session->Key;
+        }
+        if (empty($this->qrzApiKey)) {
+            print PS::RED_BD . "WARNING:\n  QRZ.com " . PS::BLUE_BD . "[QRZ]apikey" . PS::RED_BD . " is missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n\n" . PS::RESET;
             return;
         }
-        $this->qrzSession = $data->Session->Key;
+        try {
+            $url = sprintf(
+                "https://logbook.qrz.com/api?KEY=%s&ACTION=STATUS",
+                urlencode($this->qrzApiKey)
+            );
+            $raw = file_get_contents($url);
+        } catch (\Exception $e) {
+            print PS::RED_BD . "WARNING:\n  Unable to connect to QRZ.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
+            return;
+        }
+        $status = [];
+        $pairs = explode('&', $raw);
+        foreach ($pairs as $pair) {
+            list($key, $value) = explode('=', $pair, 2);
+            $status[$key] = $value;
+        }
+        if ($status['RESULT'] === 'OK') {
+            if (strtoupper($status['CALLSIGN']) !== strtoupper($this->qrzUser)) {
+                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
+                    . PS::BLUE_BD . "  - Wrong Call for key\n\n" . PS::RESET;
+                return false;
+            }
+            return;
+        }
+
+        if (isset($status['REASON'])) {
+            if (strpos($status['REASON'], 'invalid api key') !== false) {
+                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
+                    . PS::BLUE_BD . "  - Invalid QRZ Key\n\n" . PS::RESET;
+                return false;
+            }
+            if (strpos($status['REASON'], 'user does not have a valid QRZ subscription') !== false) {
+                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
+                    . PS::BLUE_BD . "  - Not XML Subscriber\n\n" . PS::RESET;
+                return false;
+            }
+        }
     }
 
     private static function dataCountActivations($data) {
@@ -169,12 +216,16 @@ class PS {
         $arg2 = $argv[2] ?? null;
         $arg3 = $argv[3] ?? null;
         if (strtoupper($arg1) === 'AUDIT') {
-            $this->AUDIT = true;
+            $this->modeAudit = true;
             return;
         }
-        $this->potaId = $arg1;
-        $this->GSQ = $arg2;
-        $this->FIX = strtoupper($arg3) === 'FIX';
+        if (strtoupper($arg1) === 'HELP') {
+            $this->modeHelp = true;
+            return;
+        }
+        $this->inputPotaId = $arg1;
+        $this->inputGSQ = $arg2;
+        $this->modeFix = strtoupper($arg3) === 'FIX';
     }
 
     private function getGSQForCall($callsign) {
@@ -212,28 +263,28 @@ class PS {
 
     private function getUserArgs() {
         print PS::YELLOW_BD . "ARGUMENTS:\n";
-        if ($this->potaId === null) {
+        if ($this->inputPotaId === null) {
             print PS::GREEN_BD . "  - Please provide POTA Park ID:  " . PS::BLUE_BD;
             $fin = fopen("php://stdin","r");
-            $this->potaId = trim(fgets($fin));
+            $this->inputPotaId = trim(fgets($fin));
         } else {
-            print PS::GREEN_BD . "  - Supplied POTA Park ID:        " . PS::BLUE_BD . $this->potaId . "\n";
+            print PS::GREEN_BD . "  - Supplied POTA Park ID:        " . PS::BLUE_BD . $this->inputPotaId . "\n";
         }
-        if ($this->GSQ === null) {
+        if ($this->inputGSQ === null) {
             print PS::GREEN_BD . "  - Please provide 8/10-char GSQ: " . PS::CYAN_BD;
             $fin = fopen("php://stdin","r");
-            $this->GSQ = trim(fgets($fin));
+            $this->inputGSQ = trim(fgets($fin));
         } else {
-            print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->GSQ . "\n";
+            print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->inputGSQ . "\n";
         }
-        if ($this->FIX) {
+        if ($this->modeFix) {
             print PS::GREEN_BD . "  - FIX operation specified:      " . PS::RESPONSE_Y . "\n";
         }
-        $this->parkName = "POTA: " . $this->potaId;
+        $this->parkName = "POTA: " . $this->inputPotaId;
     }
 
     private function header() {
-        if (!$this->FIX) {
+        if (!$this->modeFix) {
             print PS::CLS;
         }
         print PS::YELLOW
@@ -288,21 +339,24 @@ class PS {
             $this->qrzUser = $this->config['QRZ']['callsign'];
             $this->qrzPass = $this->config['QRZ']['password'];
         }
+        if (!empty($this->config['QRZ']['apikey'])) {
+            $this->qrzApiKey = $this->config['QRZ']['apikey'];
+        }
     }
 
     private function process() {
         print PS::YELLOW_BD . "STATUS:\n";
-        if (!$this->AUDIT && (!$this->potaId || !$this->GSQ)) {
+        if (!$this->modeAudit && (!$this->inputPotaId || !$this->inputGSQ)) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
                 . "    Unable to continue.\n" . PS::RESET;
             die(0);
         }
-        if ($this->AUDIT) {
+        if ($this->modeAudit) {
             $this->processAudit();
             return;
         }
-        if (!$lookup = $this->getParkName($this->potaId)) {
-            print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->potaId}.\n" . PS::RESET;
+        if (!$lookup = $this->getParkName($this->inputPotaId)) {
+            print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputPotaId}.\n" . PS::RESET;
             die(0);
         }
         $this->parkName =       $lookup['name'];
@@ -310,13 +364,13 @@ class PS {
         print PS::GREEN_BD . "  - Identified Park:              " . PS::RED_BD . $this->parkName . "\n"
             . PS::GREEN_BD . "  - Name for Log:                 " . PS::RED_BD . $this->parkNameAbbr . "\n"
             . "\n";
-        $this->fileAdifPark =   "wsjtx_log_{$this->potaId}.adi";
+        $this->fileAdifPark =   "wsjtx_log_{$this->inputPotaId}.adi";
         $this->fileAdifWsjtx =  "wsjtx_log.adi";
 
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
 
-        if ($fileAdifParkExists && $this->FIX) {
+        if ($fileAdifParkExists && $this->modeFix) {
             $this->processParkFix();
             return;
         }
@@ -411,18 +465,22 @@ class PS {
     }
 
     private function processParkArchiving() {
-        $adif = new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
-        $data = $adif->parser();
-        $MGs1 =  $this->dataCountMissingGsq($data);
-        $MGs2 =  $MGs1;
+        $adif =     new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
+        $data =     $adif->parser();
+        $dates =    $this->dataGetDates($data);
+        $last =     end($dates);
+        $logs =     $this->dataCountLogs($data, $last);
+        $MGs1 =     $this->dataCountMissingGsq($data);
+        $MGs2 =     $MGs1;
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
-            . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " does NOT exist.\n\n"
+            . "    Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained " . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct logs.\n\n"
+            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    Insufficient logs for successful activation.\n\n" . PS::GREEN_BD : '')
             . PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "   to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n"
-            . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->GSQ}" . PS::GREEN_BD . "\n"
+            . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->inputGSQ}" . PS::GREEN_BD . "\n"
             . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "                      to " . PS::RED_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
             . ($MGs1 ? "  - Lookup " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : "")
             . "\n"
@@ -451,14 +509,14 @@ class PS {
                     $MGs2 --;
                 }
             }
-            $record['MY_GRIDSQUARE'] = $this->GSQ;
+            $record['MY_GRIDSQUARE'] = $this->inputGSQ;
             $record['MY_CITY'] = $this->parkNameAbbr;
         }
         $adif = $adif->toAdif($data, $this->version);
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
-            . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->GSQ . PS::GREEN_BD . ".\n"
+            . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
             . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::RED_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n"
             . ($MGs1 ? "  - Obtained " . PS::RED_BD . ($MGs2 ?
                 ($MGs1 - $MGs2) . " of " . $MGs1 : $MGs1) . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
@@ -480,7 +538,7 @@ class PS {
             if (empty($record['GRIDSQUARE'])) {
                 $record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL']);
             }
-            $record['MY_GRIDSQUARE'] = $this->GSQ;
+            $record['MY_GRIDSQUARE'] = $this->inputGSQ;
             $record['MY_CITY'] = $this->parkNameAbbr;
         }
         $adif = $adif->toAdif($data, $this->version);
@@ -524,6 +582,9 @@ class PS {
         print PS::YELLOW_BD . "SYNTAX:\n"
         . PS::WHITE_BD . "  potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n"
         . "  - This causes the system to review all archived Park Log files and produce a report on their contents.\n"
+        . "\n"
+        . PS::WHITE_BD . "  potashell " . PS::YELLOW_BD . "HELP " . PS::YELLOW . "\n"
+        . "  - More detailed help is provided, along with this syntax guide.\n"
         . "\n"
         . PS::WHITE_BD . "  potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::YELLOW . "\n"
         . "  - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
