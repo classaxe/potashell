@@ -512,7 +512,7 @@ class PS {
             . "   to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n"
             . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->inputGSQ}" . PS::GREEN_BD . "\n"
             . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "                      to " . PS::RED_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
-            . ($MGs1 ? "  - Lookup " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : "")
+            . ($MGs1 ? "  - Correct " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares    " . (empty($this->qrzSession) ? PS::RESPONSE_N : PS::RESPONSE_Y) . "\n" : "")
             . "\n"
             . PS::YELLOW_BD . "CHOICE:\n"
             . PS::GREEN_BD . "    Proceed with operation? (Y/N) ";
@@ -548,7 +548,7 @@ class PS {
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
             . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
             . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::RED_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n"
-            . ($MGs1 ? "  - Obtained " . PS::RED_BD . ($MGs2 ?
+            . (!empty($this->qrzSession) && $MGs1 ? "  - Obtained " . PS::RED_BD . ($MGs2 ?
                 ($MGs1 - $MGs2) . " of " . $MGs1 : $MGs1) . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
             . "\n"
