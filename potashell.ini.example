@@ -1,7 +1,15 @@
+; *****************************************
+; * POTA SHELL         Copyright (C) 2024 *
+; * Authors:        Martin Francis VA3PHP *
+; *                          James Fraser *
+; * --------------------------------------*
+; * https://github.com/classaxe/potashell *
+; *****************************************
 ; This is a sample configuration file for potashell
 ; Copy this file to potashell.ini, and modify it to suit your own needs
 
 [WSJTX]
+; Set this to the directory where your WSJT-X datafiles are stored
 log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
 
 [QRZ]
@@ -11,8 +19,6 @@ log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
 ; Providing your API Key allows your log to be uploaded automatically to
 ; QRZ.com at the end of your session.
 ;
-; Uncomment the lines below and provide your own values to use these features.
-;
-; callsign = "A12BCD"
-; password = "S3cret"
-; apikey = "ABCD-1234-ABCD-1234"
+callsign = "A12BCD"
+password = "S3cret"
+apikey = "ABCD-1234-ABCD-1234"

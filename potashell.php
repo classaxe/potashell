@@ -1,5 +1,12 @@
 #!/usr/bin/php
 <?php
+/*****************************************
+ * POTA SHELL         Copyright (C) 2024 *
+ * Authors:        Martin Francis VA3PHP *
+ *                          James Fraser *
+ * --------------------------------------*
+ * https://github.com/classaxe/potashell *
+ *****************************************/
 class PS {
     const ACTIVATION_LOGS = 10;
     const USERAGENT =   "POTASHELL v%s | https://github.com/classaxe/potashell | Copyright (C) %s Martin Francis VA3PHP";
@@ -58,11 +65,11 @@ class PS {
     private $version;
 
     public function __construct() {
+        $this->getCliArgs();
         $this->version = exec('git describe --tags');
         $this->getHTTPContext();
         $this->checkPhp();
         $this->loadIni();
-        $this->getCliArgs();
         $this->header();
         $this->checkQrz();
         if ($this->modeHelp) {
@@ -90,7 +97,11 @@ class PS {
 
     private function checkQrz() {
         if (empty($this->qrzUser) || empty($this->qrzPass)) {
-            print PS::RED_BD . "WARNING:\n  QRZ.com credentials are missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n\n" . PS::RESET;
+            print
+                PS::RED_BD . "WARNING:\n"
+                . "  QRZ.com credentials were not found in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  . ".\n"
+                . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
+                . PS::RESET;
             return;
         }
         $url = sprintf(
@@ -102,16 +113,27 @@ class PS {
         $xml = file_get_contents($url, false, $this->HTTPcontext);
         $data = simplexml_load_string($xml);
         if (!empty($data->Session->Error)) {
-            print PS::RED_BD . "ERROR:\n  QRZ.com reports " . PS::BLUE_BD . "\"" . trim($data->Session->Error) . "\"" . PS::RED_BD  ."\n\n" . PS::RESET;
+            print
+                PS::RED_BD . "ERROR:\n"
+                . "  QRZ.com reports " . PS::BLUE_BD . "\"" . trim($data->Session->Error) . "\"" . PS::RED_BD  ."\n"
+                . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
+                . PS::RESET;
+            die(0);
             return;
         }
         if (empty($data->Session->Key)) {
-            print PS::RED_BD . "ERROR:\n  QRZ.com didn't return a valid session key, so no lookups are possible at this time.\n\n" . PS::RESET;
+            print
+                PS::RED_BD . "ERROR:\n  QRZ.com reports an invalid session key, so automatic log uploads are possible at this time.\n\n" . PS::RESET
+            . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
+            . PS::RESET;
         } else {
             $this->qrzSession = $data->Session->Key;
         }
         if (empty($this->qrzApiKey)) {
-            print PS::RED_BD . "WARNING:\n  QRZ.com " . PS::BLUE_BD . "[QRZ]apikey" . PS::RED_BD . " is missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n\n" . PS::RESET;
+            print
+                PS::RED_BD . "WARNING:\n"
+                . "  QRZ.com " . PS::BLUE_BD . "[QRZ]apikey" . PS::RED_BD . " is missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n"
+                . "  Without a valid XML Subscriber apikey, you won't be able to automatically upload archived logs to QRZ.com.\n\n" . PS::RESET;
             return;
         }
         try {
@@ -122,7 +144,7 @@ class PS {
             $raw = file_get_contents($url);
         } catch (\Exception $e) {
             print PS::RED_BD . "WARNING:\n  Unable to connect to QRZ.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
-            return;
+            die(0);
         }
         $status = [];
         $pairs = explode('&', $raw);
@@ -133,8 +155,8 @@ class PS {
         if ($status['RESULT'] === 'OK') {
             if (strtoupper($status['CALLSIGN']) !== strtoupper($this->qrzUser)) {
                 print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
-                    . PS::BLUE_BD . "  - Wrong Call for key\n\n" . PS::RESET;
-                return false;
+                    . PS::BLUE_BD . "  - Wrong callsign for [QRZ]apikey\n" . PS::RESET;
+                die(0);
             }
             return;
         }
@@ -142,8 +164,8 @@ class PS {
         if (isset($status['REASON'])) {
             if (strpos($status['REASON'], 'invalid api key') !== false) {
                 print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
-                    . PS::BLUE_BD . "  - Invalid QRZ Key\n\n" . PS::RESET;
-                return false;
+                    . PS::BLUE_BD . "  - Invalid QRZ Key\n" . PS::RESET;
+                die(0);
             }
             if (strpos($status['REASON'], 'user does not have a valid QRZ subscription') !== false) {
                 print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
@@ -215,6 +237,9 @@ class PS {
         $arg1 = $argv[1] ?? null;
         $arg2 = $argv[2] ?? null;
         $arg3 = $argv[3] ?? null;
+        $this->modeAudit = false;
+        $this->modeFix = false;
+        $this->modeHelp = false;
         if (strtoupper($arg1) === 'AUDIT') {
             $this->modeAudit = true;
             return;
@@ -296,38 +321,34 @@ class PS {
 
     private function help() {
         print PS::YELLOW_BD . "PURPOSE:" . PS::YELLOW ."\n"
-            . "  Operates on " . PS::RED_BD . "wsjtx_log.adi" . PS::YELLOW ." file located in " . PS::BLUE_BD . "WSJT-X" . PS::YELLOW ." data folder.\n"
-            . "\n"
-            . PS::YELLOW_BD ."ARGUMENTS:" . PS::YELLOW ."\n"
-            . "  System takes two args: Park Code - " . PS::BLUE_BD . "CA-1368" . PS::YELLOW .", and 8-char GSQ value - " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . ".\n"
-            . "  If you optionally provide a third argument of " . PS::RED_BD . "FIX" . PS::YELLOW .", the archived log file for that park,\n"
-            . "  e.g. " . PS::BLUE_BD . "wsjtx_log_CA-1368.adi" . PS::YELLOW .", will be augmented in place and resaved.\n"
-            . "\n"
-            . PS::YELLOW_BD . "OPERATION:" . PS::YELLOW ."\n"
-            . "  1 System asks the user to confirm the operation that is about to take place.\n"
-            . "     * If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n"
-            . "\n"
-            . "  2 Renames " . PS::RED_BD ."wsjtx_log.adi" . PS::YELLOW ." to " . PS::GREEN_BD ."wsjtx_log_" . PS::BLUE_BD . "CA-1368" . PS::GREEN_BD .".adi" . PS::YELLOW ." according to park code given.\n"
-            . "    If " . PS::RED_BD ."wsjtx_log.adi" . PS::YELLOW ." isn't initially present, but " . PS::GREEN_BD ."wsjtx_log_" . PS::BLUE_BD . "CA-1368" . PS::GREEN_BD .".adi" . PS::YELLOW ." is,\n"
-            . "    system asks if user wishes to resume logging at this park.\n"
-            . "     * If user responds " . PS::RESPONSE_Y . ", file is renamed to " . PS::RED_BD . "wsjtx_log.adi" . PS::YELLOW ." and operation ends.\n"
-            . "     * If user responds " . PS::RESPONSE_N . ", operation continues as below.\n"
-            . "\n"
-            . "  3 Updates all " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values with supplied 8-character GSQ value.\n"
-            . "\n"
-            . "  4 Populates new " . PS::MAGENTA_BD ."MY_CITY" . PS::YELLOW ." column using data obtained by looking up supplied Park ID at POTA.\n"
-            . "\n"
-            . "  5 Contacts QRZ API service to obtain any missing " . PS::MAGENTA_BD ."GRIDSQUARE" . PS::YELLOW ." values as needed.\n"
-            . "\n"
+            . "  This program works with WSJT-X log files to prepare them for upload to POTA.\n"
+            . "  1) It sets all " . PS::GREEN_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values to a user-supplied Maidenhead GSQ value.\n"
+            . "  2) It adds a new " . PS::GREEN_BD ."MY_CITY" . PS::YELLOW ." column to all rows, populated with the Park Name in this format:\n"
+            . "     " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP" . PS::YELLOW . " - a POTA API lookup is used to obtain the park name.\n"
+            . "  3) It Fills in any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . " by contacting the QRZ Callbook service.\n"
+            . "  4) It archives or un-archives the park log file in question - see " . PS::YELLOW_BD . "SYNTAX" . PS::YELLOW ." for more details.\n\n"
             . PS::YELLOW_BD . "CONFIGURATION:" . PS::YELLOW ."\n"
-            . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n"
-            . "\n";
+            . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n\n";
     }
 
     private function loadIni() {
         $filename = 'potashell.ini';
+        $example =  'potashell.ini.example';
         if (!file_exists(__DIR__ . DIRECTORY_SEPARATOR . $filename)) {
-            print PS::RED_BD . "ERROR:\n  Configuration file {$filename} is missing.\n" . PS::RESET;
+            $this->header();
+            print
+                PS::RED_BD . "ERROR:\n"
+                . "  The " . PS::BLUE_BD . $filename . PS::RED_BD ." Configuration file was missing.\n";
+
+            $contents = file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $example);
+            $contents = str_replace("; This is a sample configuration file for potashell\r\n", '', $contents);
+            $contents = str_replace("; Copy this file to potashell.ini, and modify it to suit your own needs\r\n", '', $contents);
+            if (file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . $filename, $contents)) {
+                print
+                    PS::RED_BD . "  It has now been created.\n"
+                    . "  Please edit the new " . PS::BLUE_BD . $filename . PS::RED_BD ." file, and supply your own values.\n";
+            }
+            print PS::RESET;
             die(0);
         };
         if (!$this->config = @parse_ini_file($filename, true)) {
@@ -335,6 +356,14 @@ class PS {
             die(0);
         };
         $this->pathAdifLocal = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
+        if (!file_exists($this->pathAdifLocal)) {
+            $this->header();
+            print
+                PS::RED_BD . "ERROR:\n"
+                . "  The specified " . PS::CYAN_BD . "[WSJTX] log_directory" . PS::RED_BD . " specified in " . PS::BLUE_BD . $filename . PS::RED_BD ." doesn't exist.\n"
+                . "  Please edit " . PS::BLUE_BD . $filename . PS::RED_BD ." and set the correct path to your WSJT-X log files.\n" . PS::RESET;
+            die(0);
+        }
         if (!empty($this->config['QRZ']['callsign']) && !empty($this->config['QRZ']['password'])) {
             $this->qrzUser = $this->config['QRZ']['callsign'];
             $this->qrzPass = $this->config['QRZ']['password'];
@@ -407,6 +436,7 @@ class PS {
     }
 
     private function processAudit() {
+        $lineLen = 100;
         print PS::GREEN_BD . "Performing Audit on all POTA Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
@@ -422,9 +452,9 @@ class PS {
             . "  #FA = Failed Activations\n"
             . "  #ST = Sessions in Total\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
-            . str_repeat('-', 90) . "\n"
+            . str_repeat('-', $lineLen) . "\n"
             . "POTA ID | MY_GRID    | #LS | #LT | #MG | #SA | #FA | #ST | Park Name in Log File\n"
-            . str_repeat('-', 90) . "\n";
+            . str_repeat('-', $lineLen) . "\n";
         $i = 0;
         foreach ($files as $file) {
             if (is_file($file)) {
@@ -461,7 +491,7 @@ class PS {
                     . PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD . "\n";
             }
         }
-        print str_repeat('-', 90) . PS::RESET . "\n";
+        print str_repeat('-', $lineLen) . PS::RESET . "\n";
     }
 
     private function processParkArchiving() {
@@ -531,12 +561,17 @@ class PS {
     private function processParkFix() {
         $adif = new adif($this->pathAdifLocal . $this->fileAdifPark);
         $data = $adif->parser();
+        $MGs = 0;
+        $FGs = 0;
         foreach ($data as &$record) {
             if (empty($record)) {
                 continue;
             }
             if (empty($record['GRIDSQUARE'])) {
-                $record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL']);
+                $MGs++;
+                if ($record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL'])) {
+                    $FGs++;
+                };
             }
             $record['MY_GRIDSQUARE'] = $this->inputGSQ;
             $record['MY_CITY'] = $this->parkNameAbbr;
@@ -544,8 +579,11 @@ class PS {
         $adif = $adif->toAdif($data, $this->version);
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
         print PS::YELLOW_BD . "RESULT:\n" . PS::GREEN_BD
-            . "    File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " with "
-            . PS::CYAN_BD . count($data) . PS::GREEN_BD . " records has been fixed." . PS::RESET. "\n";
+            . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " with "
+            . PS::CYAN_BD . count($data) . PS::GREEN_BD . " records has been fixed.\n"
+            . ($MGs ? "  - " . PS::CYAN_BD . $MGs . PS::GREEN_BD . " missing gridsquare" . ($MGs > 1 ? "s were " : " was ") : "")
+            . (!empty($this->qrzSession) ? "fixed" : "NOT fixed, due to invalid QRZ callsign and password values\n    in " . PS::BLUE_BD . "potashell.ini" . PS::GREEN_BD)
+            . PS::RESET. "\n";
     }
 
     private function processParkUnarchiving() {
@@ -580,19 +618,37 @@ class PS {
     }
     private function syntax() {
         print PS::YELLOW_BD . "SYNTAX:\n"
-        . PS::WHITE_BD . "  potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n"
-        . "  - This causes the system to review all archived Park Log files and produce a report on their contents.\n"
+        . "  1. " . PS::WHITE_BD . "potashell" . PS::YELLOW . "\n"
+        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::YELLOW . "\n"
+        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::YELLOW . "\n"
+        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "FIX\n\n" . PS::YELLOW_BD
+        . "     a) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
+        . "       - If an active log session has completed, this mode augments and archives\n"
+        . "         " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW ." to " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW ." ready for the next session to begin,\n"
+        . "         and WSJT-X will start a new empty log file.\n"
+        . "         Refer to the " . PS::YELLOW_BD . "PURPOSE" . PS::YELLOW . " section for the corrections made to the archived log file.\n"
+        . "       - If last session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n\n"
+        . PS::YELLOW_BD
+        . "     b) WITHOUT AN ACTIVE LOG FILE:\n" . PS::YELLOW
+        . "       - If there is NO active " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " log file, the system looks for a file\n"
+        . "         named " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW . ", and if found, it renames it to " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . "\n"
+        . "         so that the user can continue adding logs for this park.\n\n" . PS::YELLOW_BD
+        . "     c) PROMPTING FOR USER INPUTS:\n" . PS::YELLOW
+        . "       - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
+        . "       - Before any files are renamed or modified, user is asked to confirm the operation.\n"
+        . "         If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n\n" . PS::YELLOW_BD
+
+        . "     d) THE \"FIX\" MODE:\n" . PS::YELLOW
+        . "       - If the optional " . PS::GREEN_BD . "FIX" . PS::YELLOW . " argument is given, system operates directly on the Park Log file.\n"
+        . "       - No files are renamed.\n"
         . "\n"
-        . PS::WHITE_BD . "  potashell " . PS::YELLOW_BD . "HELP " . PS::YELLOW . "\n"
-        . "  - More detailed help is provided, along with this syntax guide.\n"
+        . PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n"
+        . "     The system reviews ALL archived Park Log files, and produces a report on their contents.\n"
         . "\n"
-        . PS::WHITE_BD . "  potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::YELLOW . "\n"
-        . "  - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
+        . PS::YELLOW_BD . "  3. " . PS::WHITE_BD . "potashell " . PS::YELLOW_BD . "HELP " . PS::YELLOW . "\n"
+        . "     More detailed help is provided, along with this syntax guide.\n"
         . "\n"
-        . PS::WHITE_BD . "  potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "FIX" . PS::YELLOW . "\n"
-        . "  - If optional " . PS::GREEN_BD . "FIX" . PS::YELLOW . " argument is given, system operates in place on the Park Log file.\n"
-        . "\n"
-        . str_repeat('-', 90) . PS::RESET ."\n\n";
+        . str_repeat('-', 90) . PS::RESET ."\n";
 
     }
     private function getHTTPContext() {
