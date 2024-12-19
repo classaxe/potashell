@@ -253,11 +253,11 @@ class PS {
         $this->modeCheck = false;
         $this->modeFix = false;
         $this->modeHelp = false;
-        if (strtoupper($arg1) === 'AUDIT') {
+        if ($arg1 && strtoupper($arg1) === 'AUDIT') {
             $this->modeAudit = true;
             return;
         }
-        if (strtoupper($arg1) === 'HELP') {
+        if ($arg1 && strtoupper($arg1) === 'HELP') {
             $this->modeHelp = true;
             return;
         }
