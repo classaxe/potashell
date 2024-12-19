@@ -50,6 +50,7 @@ class PS {
     private $fileAdifPark;
     private $fileAdifWsjtx;
     private $modeAudit;
+    private $modeCheck;
     private $modeFix;
     private $modeHelp;
     private $inputGSQ;
@@ -192,6 +193,17 @@ class PS {
         return $activations;
     }
 
+    private static function dataCountLocations($data) {
+        $unique = [];
+        foreach ($data as $d) {
+            if (empty($d['MY_CITY'])) {
+                continue;
+            }
+            $unique[$d['MY_CITY']] = true;
+        }
+        return count($unique);
+    }
+
     private static function dataCountLogs($data, $date = null) {
         $unique = [];
         foreach ($data as $d) {
@@ -238,6 +250,7 @@ class PS {
         $arg2 = $argv[2] ?? null;
         $arg3 = $argv[3] ?? null;
         $this->modeAudit = false;
+        $this->modeCheck = false;
         $this->modeFix = false;
         $this->modeHelp = false;
         if (strtoupper($arg1) === 'AUDIT') {
@@ -250,6 +263,7 @@ class PS {
         }
         $this->inputPotaId = $arg1;
         $this->inputGSQ = $arg2;
+        $this->modeCheck = strtoupper($arg3) === 'CHECK';
         $this->modeFix = strtoupper($arg3) === 'FIX';
     }
 
@@ -374,7 +388,7 @@ class PS {
     }
 
     private function process() {
-        print PS::YELLOW_BD . "STATUS:\n";
+        print PS::YELLOW_BD . "\nSTATUS:\n";
         if (!$this->modeAudit && (!$this->inputPotaId || !$this->inputGSQ)) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
                 . "    Unable to continue.\n" . PS::RESET;
@@ -399,7 +413,12 @@ class PS {
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
 
-        if ($fileAdifParkExists && $this->modeFix) {
+        if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeCheck) {
+            $this->processParkCheck();
+            return;
+        }
+
+        if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeFix) {
             $this->processParkFix();
             return;
         }
@@ -505,7 +524,8 @@ class PS {
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
-            . "    Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained " . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct logs.\n\n"
+            . "    Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
+            . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n\n"
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    Insufficient logs for successful activation.\n\n" . PS::GREEN_BD : '')
             . PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
@@ -558,8 +578,32 @@ class PS {
             . PS::RESET;
     }
 
+    private function processParkCheck() {
+        $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
+        $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
+        $adif =     new adif($this->pathAdifLocal . $fileAdif);
+        $data =     $adif->parser();
+        $dates =    $this->dataGetDates($data);
+        $last =     end($dates);
+        $logs =     $this->dataCountLogs($data, $last);
+        $MGs1 =     $this->dataCountMissingGsq($data);
+        $locs =     $this->dataCountLocations($data);
+
+        print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD
+            . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
+            . ($MGs1 ? "  - There are " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares\n" : "")
+            . "  - Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
+            . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n"
+            . ($logs < PS::ACTIVATION_LOGS  || $locs > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
+            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
+            . ($locs > 1 ? PS::RED_BD ."  * There are " . $locs . " named log locations contained within this one file.\n" . PS::GREEN_BD : '')
+            . PS::RESET;
+    }
+
     private function processParkFix() {
-        $adif = new adif($this->pathAdifLocal . $this->fileAdifPark);
+        $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
+        $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
+        $adif = new adif($this->pathAdifLocal . $fileAdif);
         $data = $adif->parser();
         $MGs = 0;
         $FGs = 0;
@@ -577,13 +621,17 @@ class PS {
             $record['MY_CITY'] = $this->parkNameAbbr;
         }
         $adif = $adif->toAdif($data, $this->version);
-        file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
+        file_put_contents($this->pathAdifLocal . $fileAdif, $adif);
         print PS::YELLOW_BD . "RESULT:\n" . PS::GREEN_BD
-            . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " with "
+            . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD . " with "
             . PS::CYAN_BD . count($data) . PS::GREEN_BD . " records has been fixed.\n"
-            . ($MGs ? "  - " . PS::CYAN_BD . $MGs . PS::GREEN_BD . " missing gridsquare" . ($MGs > 1 ? "s were " : " was ") : "")
-            . (!empty($this->qrzSession) ? "fixed" : "NOT fixed, due to invalid QRZ callsign and password values\n    in " . PS::BLUE_BD . "potashell.ini" . PS::GREEN_BD)
-            . PS::RESET. "\n";
+            . ($MGs ?
+                "  - " . PS::CYAN_BD . $MGs . PS::GREEN_BD . " missing gridsquare" . ($MGs > 1 ? "s were " : " was ")
+                . (!empty($this->qrzSession) ? "fixed\n" : "NOT fixed, due to invalid QRZ callsign and password values\n    in " . PS::BLUE_BD . "potashell.ini" . PS::GREEN_BD . "\n")
+                :
+                ""
+            )
+            . PS::RESET;
     }
 
     private function processParkUnarchiving() {
@@ -621,28 +669,37 @@ class PS {
         . "  1. " . PS::WHITE_BD . "potashell" . PS::YELLOW . "\n"
         . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::YELLOW . "\n"
         . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::YELLOW . "\n"
-        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "FIX\n\n" . PS::YELLOW_BD
+        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n" . PS::YELLOW_BD
+        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "FIX\n" . PS::YELLOW_BD
+        . "\n"
         . "     a) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
         . "       - If an active log session has completed, this mode augments and archives\n"
         . "         " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW ." to " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW ." ready for the next session to begin,\n"
-        . "         and WSJT-X will start a new empty log file.\n"
-        . "         Refer to the " . PS::YELLOW_BD . "PURPOSE" . PS::YELLOW . " section for the corrections made to the archived log file.\n"
-        . "       - If last session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n\n"
-        . PS::YELLOW_BD
+        . "         and you should manually restart " . PS::GREEN_BD ."WSJT-X" . PS::YELLOW ." to start logging to a new empty log file.\n"
+        . "       - If last session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n"
+        . "       - Refer to the " . PS::YELLOW_BD . "PURPOSE" . PS::YELLOW . " section in " . PS::YELLOW_BD . "HELP" . PS::YELLOW . " for the changes made.\n"
+        . "\n" . PS::YELLOW_BD
         . "     b) WITHOUT AN ACTIVE LOG FILE:\n" . PS::YELLOW
         . "       - If there is NO active " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " log file, the system looks for a file\n"
         . "         named " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW . ", and if found, it renames it to " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . "\n"
-        . "         so that the user can continue adding logs for this park.\n\n" . PS::YELLOW_BD
+        . "         so that the user can continue adding logs for this park.\n"
+        . "\n" . PS::YELLOW_BD
         . "     c) PROMPTING FOR USER INPUTS:\n" . PS::YELLOW
         . "       - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
         . "       - Before any files are renamed or modified, user is asked to confirm the operation.\n"
-        . "         If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n\n" . PS::YELLOW_BD
-
-        . "     d) THE \"FIX\" MODE:\n" . PS::YELLOW
-        . "       - If the optional " . PS::GREEN_BD . "FIX" . PS::YELLOW . " argument is given, system operates directly on the Park Log file.\n"
+        . "         If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n"
+        . "\n" . PS::YELLOW_BD
+        . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
+        . "       - If the optional " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
+        . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
         . "       - No files are renamed.\n"
-        . "\n"
-        . PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n"
+        . "\n" . PS::YELLOW_BD
+        . "     e) THE \"FIX\" MODE:\n" . PS::YELLOW
+        . "       - If the optional " . PS::GREEN_BD . "FIX" . PS::YELLOW . " argument is given, system operates directly on either\n"
+        . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
+        . "       - No files are renamed.\n"
+        . "\n" . PS::YELLOW_BD
+        . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n"
         . "     The system reviews ALL archived Park Log files, and produces a report on their contents.\n"
         . "\n"
         . PS::YELLOW_BD . "  3. " . PS::WHITE_BD . "potashell " . PS::YELLOW_BD . "HELP " . PS::YELLOW . "\n"
