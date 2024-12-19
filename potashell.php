@@ -10,24 +10,24 @@
 class PS {
     const ACTIVATION_LOGS = 10;
     const USERAGENT =   "POTASHELL v%s | https://github.com/classaxe/potashell | Copyright (C) %s Martin Francis VA3PHP";
-    const RED =         "[0;31m";
-    const RED_BD =      "[1;31m";
-    const GREEN =       "[0;32m";
-    const GREEN_BD =    "[1;32m";
-    const YELLOW =      "[0;33m";
-    const YELLOW_BD =   "[1;33m";
-    const BLUE =        "[0;34m";
-    const BLUE_BD =     "[1;34m";
-    const MAGENTA =     "[0;35m";
-    const MAGENTA_BD =  "[1;35m";
-    const CYAN =        "[0;36m";
-    const CYAN_BD =     "[1;36m";
-    const WHITE =       "[0;37m";
-    const WHITE_BD =    "[1;37m";
-    const RESPONSE_Y =  "[0;33;1;42m Y [0;33m";
-    const RESPONSE_N =  "[0;33;1;41m N [0;33m";
-    const CLS =         "[H[J";
-    const RESET =       "[0m";
+    const RED =         "\e[0;31m";
+    const RED_BD =      "\e[1;31m";
+    const GREEN =       "\e[0;32m";
+    const GREEN_BD =    "\e[1;32m";
+    const YELLOW =      "\e[0;33m";
+    const YELLOW_BD =   "\e[1;33m";
+    const BLUE =        "\e[0;34m";
+    const BLUE_BD =     "\e[1;34m";
+    const MAGENTA =     "\e[0;35m";
+    const MAGENTA_BD =  "\e[1;35m";
+    const CYAN =        "\e[0;36m";
+    const CYAN_BD =     "\e[1;36m";
+    const WHITE =       "\e[0;37m";
+    const WHITE_BD =    "\e[1;37m";
+    const RESPONSE_Y =  "\e[0;33;1;42m Y \e[0;33m";
+    const RESPONSE_N =  "\e[0;33;1;41m N \e[0;33m";
+    const CLS =         "\e[H\e[J";
+    const RESET =       "\e[0m";
 
     const NAME_SUBS = [
         'Conservation Area' =>          'CA',
@@ -263,8 +263,8 @@ class PS {
         }
         $this->inputPotaId = $arg1;
         $this->inputGSQ = $arg2;
-        $this->modeCheck = strtoupper($arg3) === 'CHECK';
-        $this->modeFix = strtoupper($arg3) === 'FIX';
+        $this->modeCheck = $arg3 && strtoupper($arg3) === 'CHECK';
+        $this->modeFix = $arg3 && strtoupper($arg3) === 'FIX';
     }
 
     private function getGSQForCall($callsign) {
@@ -320,6 +320,7 @@ class PS {
             print PS::GREEN_BD . "  - FIX operation specified:      " . PS::RESPONSE_Y . "\n";
         }
         $this->parkName = "POTA: " . $this->inputPotaId;
+        print "\n";
     }
 
     private function header() {
@@ -388,7 +389,7 @@ class PS {
     }
 
     private function process() {
-        print PS::YELLOW_BD . "\nSTATUS:\n";
+        print PS::YELLOW_BD . "STATUS:\n";
         if (!$this->modeAudit && (!$this->inputPotaId || !$this->inputGSQ)) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
                 . "    Unable to continue.\n" . PS::RESET;
