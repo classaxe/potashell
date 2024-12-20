@@ -49,16 +49,17 @@ class PS {
     private $config;
     private $fileAdifPark;
     private $fileAdifWsjtx;
+    private $hasInternet;
+    private $inputGSQ;
+    private $inputPotaId;
     private $modeAudit;
     private $modeCheck;
     private $modeFix;
     private $modeHelp;
-    private $inputGSQ;
     private $HTTPcontext;
     private $parkName;
     private $parkNameAbbr;
     private $pathAdifLocal;
-    private $inputPotaId;
     private $qrzApiKey;
     private $qrzPass;
     private $qrzSession;
@@ -97,6 +98,18 @@ class PS {
     }
 
     private function checkQrz() {
+        if (!@fsockopen('www.example.com', 80)) {
+            print
+                PS::RED_BD . "WARNING:\n"
+                . "  - You have no internet connection.\n"
+                . "  - Automatic gridquare and park name lookups will not work.\n"
+                . "  - QRZ uploads are not possible at this time.\n"
+                . PS::RESET
+                . "\n";
+            $this->hasInternet = false;
+            return;
+        }
+        $this->hasInternet = true;
         if (empty($this->qrzUser) || empty($this->qrzPass)) {
             print
                 PS::RED_BD . "WARNING:\n"
@@ -193,7 +206,7 @@ class PS {
         return $activations;
     }
 
-    private static function dataCountLocations($data) {
+    private static function dataGetLocations($data) {
         $unique = [];
         foreach ($data as $d) {
             if (empty($d['MY_CITY'])) {
@@ -201,7 +214,7 @@ class PS {
             }
             $unique[$d['MY_CITY']] = true;
         }
-        return count($unique);
+        return array_keys($unique);
     }
 
     private static function dataCountLogs($data, $date = null) {
@@ -286,17 +299,23 @@ class PS {
     }
 
     private function getParkName($potaId) {
-        $url = "https://api.pota.app/park/" . trim($potaId);
-        $data = file_get_contents($url, false, $this->HTTPcontext);
-        $data = json_decode($data);
-        if (!$data) {
-            return false;
+        if ($this->hasInternet) {
+            $url = "https://api.pota.app/park/" . trim($potaId);
+            $data = file_get_contents($url, false, $this->HTTPcontext);
+            $data = json_decode($data);
+            if (!$data) {
+                return false;
+            }
+            $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
+            $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
+            return [
+                'name' => $parkName,
+                'abbr' => $parkNameAbbr
+            ];
         }
-        $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
-        $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
         return [
-            'name' => $parkName,
-            'abbr' => $parkNameAbbr,
+            'name' => $potaId,
+            'abbr' => 'POTA: ' . $potaId
         ];
     }
 
@@ -522,19 +541,33 @@ class PS {
         $logs =     $this->dataCountLogs($data, $last);
         $MGs1 =     $this->dataCountMissingGsq($data);
         $MGs2 =     $MGs1;
+        $locs =     $this->dataGetLocations($data);
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
             . "    Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
             . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n\n"
-            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    Insufficient logs for successful activation.\n\n" . PS::GREEN_BD : '')
             . PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-            . "   to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n"
-            . "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->inputGSQ}" . PS::GREEN_BD . "\n"
+            . "   to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n";
+
+        if (count($locs) > 1) {
+            print PS::RED_BD . "\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
+                . "    - " . implode("\n    - ", $locs) . "\n"
+                . "  * Manual intervention is required.\n"
+                . "  * The operation has been cancelled.\n"
+                . PS::RESET;
+            return;
+        }
+        print "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->inputGSQ}" . PS::GREEN_BD . "\n"
             . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "                      to " . PS::RED_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
-            . ($MGs1 ? "  - Correct " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares    " . (empty($this->qrzSession) ? PS::RESPONSE_N : PS::RESPONSE_Y) . "\n" : "")
+            . ($MGs1 ?
+                "  - Correct " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares    "
+                . (empty($this->qrzSession) ? PS::RESPONSE_N . " (no connection to QRZ.com)": PS::RESPONSE_Y . " (QRZ.com lookups are available)") . "\n"
+                : ""
+            )
             . "\n"
+            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "")
             . PS::YELLOW_BD . "CHOICE:\n"
             . PS::GREEN_BD . "    Proceed with operation? (Y/N) ";
 
@@ -574,8 +607,10 @@ class PS {
               )
             . "\n"
             . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
-            . "  - You may continue logging at another park where a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
-            . "  - Alternatively, run this script again with a new POTA Park ID to resume logging at a previously visited park.\n"
+            . "  - You should now restart WSJT-X before logging at another park, where\n"
+            . "    a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
+            . "  - Alternatively, run this script again with a new POTA Park ID to resume\n"
+            . "    logging at a previously visited park.\n"
             . PS::RESET;
     }
 
@@ -588,7 +623,7 @@ class PS {
         $last =     end($dates);
         $logs =     $this->dataCountLogs($data, $last);
         $MGs1 =     $this->dataCountMissingGsq($data);
-        $locs =     $this->dataCountLocations($data);
+        $locs =     $this->dataGetLocations($data);
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
@@ -597,7 +632,10 @@ class PS {
             . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n"
             . ($logs < PS::ACTIVATION_LOGS  || $locs > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
-            . ($locs > 1 ? PS::RED_BD ."  * There are " . $locs . " named log locations contained within this one file.\n" . PS::GREEN_BD : '')
+            . (count($locs) > 1 ?
+                PS::RED_BD ."  * There are " . count($locs) . " named log locations contained within this one file:\n"
+                . "    - " .implode("\n    - ", $locs) . "\n". PS::GREEN_BD : ''
+            )
             . PS::RESET;
     }
 
@@ -608,6 +646,12 @@ class PS {
         $data = $adif->parser();
         $MGs = 0;
         $FGs = 0;
+        $locs = self::dataGetLocations($data);
+        if (count($locs) > 1) {
+            print PS::RED_BD ."ERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
+                . "    - " .implode("\n    - ", $locs) . "\n  * The operation has been cancelled.\n". PS::RESET;
+            return;
+        }
         foreach ($data as &$record) {
             if (empty($record)) {
                 continue;
@@ -636,12 +680,22 @@ class PS {
     }
 
     private function processParkUnarchiving() {
-        $adif1 = new adif($this->pathAdifLocal . $this->fileAdifPark);
-        $data1 = $adif1->parser();
+        $adif = new adif($this->pathAdifLocal . $this->fileAdifPark);
+        $data = $adif->parser();
+        $locs =     $this->dataGetLocations($data);
+
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
-            . " exists and contains " . PS::MAGENTA_BD . count($data1) . PS::GREEN_BD . " entries.\n"
-            . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " does NOT exist.\n\n"
-            . PS::YELLOW_BD . "OPERATION:\n"
+            . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
+            . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " does NOT exist.\n\n";
+        if (count($locs) > 1) {
+            print PS::RED_BD ."ERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
+                . "    - " . implode("\n    - ", $locs) . "\n"
+                . "  * Manual intervention is required.\n"
+                . "  * The operation has been cancelled.\n"
+                . PS::RESET;
+            return;
+        }
+        print PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Rename archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " to " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD ."\n"
             . "  - Resume logging at park " . PS::RED_BD . "{$this->parkName}" . PS::GREEN_BD . "\n\n"
             . PS::YELLOW_BD . "CHOICE:\n" . PS::GREEN_BD . "    Continue with operation? (Y/N) ";
