@@ -424,9 +424,8 @@ class PS {
         }
         $this->parkName =       $lookup['name'];
         $this->parkNameAbbr =   $lookup['abbr'];
-        print PS::GREEN_BD . "  - Identified Park:              " . PS::RED_BD . $this->parkName . "\n"
-            . PS::GREEN_BD . "  - Name for Log:                 " . PS::RED_BD . $this->parkNameAbbr . "\n"
-            . "\n";
+        print PS::GREEN_BD . "  - Identified Park:                      " . PS::BLUE_BD . $this->parkName . "\n"
+            . PS::GREEN_BD . "  - Name for Log:                         " . PS::BLUE_BD . $this->parkNameAbbr . "\n";
         $this->fileAdifPark =   "wsjtx_log_{$this->inputPotaId}.adi";
         $this->fileAdifWsjtx =  "wsjtx_log.adi";
 
@@ -545,11 +544,11 @@ class PS {
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
-            . "    Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
+            . "  - Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
             . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n\n"
             . PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-            . "   to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n";
+            . " to     " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n";
 
         if (count($locs) > 1) {
             print PS::RED_BD . "\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
@@ -559,16 +558,29 @@ class PS {
                 . PS::RESET;
             return;
         }
-        print "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . "                to " . PS::CYAN_BD . "{$this->inputGSQ}" . PS::GREEN_BD . "\n"
-            . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . "                      to " . PS::RED_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
+        print "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . " to                  " . PS::CYAN_BD . "{$this->inputGSQ}" . PS::GREEN_BD . "\n"
+            . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . " to                        " . PS::CYAN_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
             . ($MGs1 ?
-                "  - Correct " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares    "
-                . (empty($this->qrzSession) ? PS::RESPONSE_N . " (no connection to QRZ.com)": PS::RESPONSE_Y . " (QRZ.com lookups are available)") . "\n"
+                "  - Correct " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares         "
+                . (empty($this->qrzSession) ?
+                    PS::RESPONSE_N . " (no connection to QRZ.com)"
+                    : PS::RESPONSE_Y . " (QRZ.com lookups are available)"
+                ) . "\n"
                 : ""
             )
             . "\n"
-            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "")
-            . PS::YELLOW_BD . "CHOICE:\n"
+            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
+
+        if (trim(substr($locs[0], 0, 14)) !== trim(substr($this->parkNameAbbr, 0, 14))) {
+            print PS::RED_BD . "ERROR:\n"
+                . "  * The log contains reports made at      " . PS::BLUE_BD . $locs[0] . PS::RED_BD . "\n"
+                . "  * You indicate that your logs were from " . PS::BLUE_BD . $this->parkNameAbbr . PS::RED_BD . "\n"
+                . "  * The operation has been cancelled.\n"
+                . PS::RESET;
+            return;
+        }
+
+        print PS::YELLOW_BD . "CHOICE:\n"
             . PS::GREEN_BD . "    Proceed with operation? (Y/N) ";
 
         $fin = fopen("php://stdin","r");
@@ -578,7 +590,6 @@ class PS {
             print "    Operation cancelled.\n" . PS::RESET;
             return;
         }
-
         rename(
             $this->pathAdifLocal . $this->fileAdifWsjtx,
             $this->pathAdifLocal . $this->fileAdifPark
