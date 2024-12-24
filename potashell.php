@@ -571,7 +571,7 @@ class PS {
             . "\n"
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
 
-        if (trim(substr($locs[0], 0, 14)) !== trim(substr($this->parkNameAbbr, 0, 14))) {
+        if (isset($locs[0]) && trim(substr($locs[0], 0, 14)) !== trim(substr($this->parkNameAbbr, 0, 14))) {
             print PS::RED_BD . "ERROR:\n"
                 . "  * The log contains reports made at      " . PS::BLUE_BD . $locs[0] . PS::RED_BD . "\n"
                 . "  * You indicate that your logs were from " . PS::BLUE_BD . $this->parkNameAbbr . PS::RED_BD . "\n"
@@ -641,7 +641,7 @@ class PS {
             . ($MGs1 ? "  - There are " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares\n" : "")
             . "  - Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
             . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n"
-            . ($logs < PS::ACTIVATION_LOGS  || $locs > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
+            . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
                 PS::RED_BD ."  * There are " . count($locs) . " named log locations contained within this one file:\n"
@@ -659,7 +659,7 @@ class PS {
         $FGs = 0;
         $locs = self::dataGetLocations($data);
         if (count($locs) > 1) {
-            print PS::RED_BD ."ERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
+            print PS::RED_BD ."\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
                 . "    - " .implode("\n    - ", $locs) . "\n  * The operation has been cancelled.\n". PS::RESET;
             return;
         }
@@ -678,7 +678,7 @@ class PS {
         }
         $adif = $adif->toAdif($data, $this->version);
         file_put_contents($this->pathAdifLocal . $fileAdif, $adif);
-        print PS::YELLOW_BD . "RESULT:\n" . PS::GREEN_BD
+        print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD . " with "
             . PS::CYAN_BD . count($data) . PS::GREEN_BD . " records has been fixed.\n"
             . ($MGs ?
