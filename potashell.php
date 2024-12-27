@@ -114,7 +114,8 @@ class PS {
             print
                 PS::RED_BD . "WARNING:\n"
                 . "  QRZ.com credentials were not found in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  . ".\n"
-                . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
+                . "  Missing GSQ values for logged contacts cannot be fixed without\n"
+                . "  valid QRZ credentials.\n"
                 . PS::RESET;
             return;
         }
@@ -130,7 +131,8 @@ class PS {
             print
                 PS::RED_BD . "ERROR:\n"
                 . "  QRZ.com reports " . PS::BLUE_BD . "\"" . trim($data->Session->Error) . "\"" . PS::RED_BD  ."\n"
-                . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
+                . "  Missing GSQ values for logged contacts cannot be fixed without\n"
+                . "  valid QRZ credentials.\n"
                 . PS::RESET;
             die(0);
             return;
@@ -147,7 +149,8 @@ class PS {
             print
                 PS::RED_BD . "WARNING:\n"
                 . "  QRZ.com " . PS::BLUE_BD . "[QRZ]apikey" . PS::RED_BD . " is missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n"
-                . "  Without a valid XML Subscriber apikey, you won't be able to automatically upload archived logs to QRZ.com.\n\n" . PS::RESET;
+                . "  Without a valid XML Subscriber apikey, you won't be able to automatically upload\n"
+                . "  archived logs to QRZ.com.\n\n" . PS::RESET;
             return;
         }
         try {
@@ -184,7 +187,7 @@ class PS {
             if (strpos($status['REASON'], 'user does not have a valid QRZ subscription') !== false) {
                 print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
                     . PS::BLUE_BD . "  - Not XML Subscriber\n\n" . PS::RESET;
-                return false;
+                die(0);
             }
         }
     }
@@ -296,6 +299,15 @@ class PS {
             print PS::RED_BD . "    WARNING: - No gridsquare found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
         }
         return $data->Callsign->grid ?? null;
+    }
+
+    private function getHTTPContext() {
+        $this->HTTPcontext = stream_context_create([
+            'http'=> [
+                'method'=>"GET",
+                'header'=>"User-Agent: " . sprintf(PS::USERAGENT, $this->version, date('Y')) . "\r\n"
+            ]
+        ]);
     }
 
     private function getParkName($potaId) {
@@ -568,6 +580,7 @@ class PS {
                 ) . "\n"
                 : ""
             )
+            . ($this->qrzApiKey ? "  - Upload park log to QRZ.com\n" : "")
             . "\n"
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
 
@@ -609,6 +622,12 @@ class PS {
         }
         $adif = $adif->toAdif($data, $this->version);
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
+        $stats = false;
+        if ($this->qrzApiKey) {
+            $stats = $this->uploadToQrz($data, $last);
+        }
+
+
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
             . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
@@ -616,6 +635,13 @@ class PS {
             . (!empty($this->qrzSession) && $MGs1 ? "  - Obtained " . PS::RED_BD . ($MGs2 ?
                 ($MGs1 - $MGs2) . " of " . $MGs1 : $MGs1) . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
+            . ($stats ?
+                  "  - Uploaded " . $logs . " Logs to QRZ.com:\n"
+                . "     * Inserted:   ". $stats['INSERTED'] . "\n"
+                . "     * Duplicates: " . $stats['DUPLICATE'] . "\n"
+                . "     * Errors:     " . $stats['ERROR'] . "\n"
+              : ""
+            )
             . "\n"
             . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
             . "  - You should now restart WSJT-X before logging at another park, where\n"
@@ -774,13 +800,52 @@ class PS {
         . str_repeat('-', 90) . PS::RESET ."\n";
 
     }
-    private function getHTTPContext() {
-        $this->HTTPcontext = stream_context_create([
-            'http'=> [
-                'method'=>"GET",
-                'header'=>"User-Agent: " . sprintf(PS::USERAGENT, $this->version, date('Y')) . "\r\n"
-            ]
-        ]);
+
+    private function uploadToQrz($data, $date) {
+        $adifRecords = [];
+        foreach ($data as $record) {
+            if ($record['QSO_DATE'] !== (string) $date) {
+                continue;
+            }
+            $adifRecords[] = adif::toAdif([$record], $this->version, true);
+        }
+        $stats = [
+            'ERROR' => 0,
+            'INSERTED' => 0,
+            'DUPLICATE' => 0
+        ];
+        foreach ($adifRecords as $adifRecord) {
+            try {
+                $url = sprintf(
+                    "https://logbook.qrz.com/api?KEY=%s&ACTION=INSERT&ADIF=%s",
+                    urlencode($this->qrzApiKey),
+                    urlencode($adifRecord)
+                );
+                $raw = file_get_contents($url);
+            } catch (\Exception $e) {
+                print PS::RED_BD . "WARNING:\n  Unable to connect to QRZ.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
+                die(0);
+            }
+            $status = [];
+            $pairs = explode('&', $raw);
+            foreach ($pairs as $pair) {
+                list($key, $value) = explode('=', $pair, 2);
+                $status[$key] = $value;
+            }
+            switch ($status['RESULT']) {
+                case 'OK':
+                    $stats['INSERTED']++;
+                    break;
+                case 'FAIL':
+                    if ($status['REASON'] === 'Unable to add QSO to database: duplicate') {
+                        $stats['DUPLICATE']++;
+                    } else {
+                        $stats['ERROR']++;
+                    }
+                    break;
+            }
+        }
+        return $stats;
     }
 }
 
@@ -908,13 +973,12 @@ class adif {
         return $datas;
     }
 
-    public function toAdif($data, $version) {
+    public static function toAdif($data, $version, $raw = false) {
         
         // construct an adif string out of data
         // construct header, (copied from an adif file)
 
-        $output =
-            "ADIF Export from POTASHELL\n"
+        $output = ($raw ? "" : "ADIF Export from POTASHELL\n"
             . "https://github.com/classaxe/potashell\n"
             . "Copyright (C) 2024, Martin Francis, James Fraser - classaxe.com\n"
             . "File generated on " . date('Y-m-d \a\t H:m:s') ."\n"
@@ -922,16 +986,17 @@ class adif {
             . "<PROGRAMID:9>POTAShell\n"
             . "<PROGRAMVERSION:" . strlen($version) . ">" . $version ."\n"
             . "<EOH>\n"
-            . "\n";
-        
+            . "\n"
+        );
+
         // construct records
         // format seems to be <FIELD_NAME:DATALENGTH>DATA*space* (more fields) <eor>
 
         foreach($data as $row) {
             foreach ($row as $key => $value) {
-                $output .=  "<" . $key . ":" . $this->strlen($value) . ">" . $value . " ";
+                $output .=  "<" . $key . ":" . mb_strlen($value) . ">" . $value . " ";
             }
-            $output .= "<EOR>\r\n";
+            $output .= "<EOR>" . ($raw ? "" : "\r\n");
         }
 
         return $output;
@@ -961,8 +1026,12 @@ class adif {
     }
 }
 
-function dd($var) {
+function d($var) {
     print "<pre>". print_r($var, true) ."</pre>";
+}
+
+function dd($var) {
+    d($var);
     exit;
 }
 
