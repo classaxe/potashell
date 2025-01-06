@@ -88,11 +88,11 @@ class PS {
 
     private function checkPhp() {
         if (!extension_loaded('mbstring')) {
-            print PS::RED_BD . "ERROR:\n  PHP mbstring extension is not available.\n" . PS::RESET;
+            print PS::RED_BD . "ERROR:\n  PHP mbstring extension is not available.\n  (PHP " . phpversion() . ")\n" . PS::RESET;
             die(0);
         }
         if (!extension_loaded('openssl')) {
-            print PS::RED_BD . "ERROR:\n  PHP OpenSSL extension is not available.\n" . PS::RESET;
+            print PS::RED_BD . "ERROR:\n  PHP OpenSSL extension is not available.\n  (PHP " . phpversion() . ")\n" . PS::RESET;
             die(0);
         }
     }
@@ -262,9 +262,9 @@ class PS {
 
     private function getCliArgs() {
         global $argv;
-        $arg1 = $argv[1] ?? null;
-        $arg2 = $argv[2] ?? null;
-        $arg3 = $argv[3] ?? null;
+        $arg1 = isset($argv[1]) ? $argv[1] : null;
+        $arg2 = isset($argv[2]) ? $argv[2] : null;
+        $arg3 = isset($argv[3]) ? $argv[3] : null;
         $this->modeAudit = false;
         $this->modeCheck = false;
         $this->modeFix = false;
@@ -298,7 +298,7 @@ class PS {
         if (empty($data->Callsign->grid)) {
             print PS::RED_BD . "    WARNING: - No gridsquare found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
         }
-        return $data->Callsign->grid ?? null;
+        return isset($data->Callsign->grid) ? $data->Callsign->grid : null;
     }
 
     private function getHTTPContext() {

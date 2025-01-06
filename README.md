@@ -28,8 +28,9 @@
 ---
 
 **REQUIREMENTS**
-  1. You need [PHP](https://php.net) installed and available to run at the command prompt:<br>
+  1. You need [PHP](https://php.net) 5.6 or newer installed and available to run at the command prompt:<br>
      Type ```php -v``` at the command prompt to verify your installed PHP version.<br>
+     This program has been tested on every major release of PHP from **5.6** to **8.4**.<br>
   2. You should have WSJT-X installed, and be able to provide the path to the stored data files.
   3. You will need an active [**QRZ.com**](https://qrz.com) XML Subscriber's account for the
      automatic lookup of missing gridsquares to work, and for the system to automatically
