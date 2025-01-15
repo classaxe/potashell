@@ -253,7 +253,11 @@ class PS {
     private static function dataGetMyGrid($data) {
         $gsqs = [];
         foreach ($data as $d) {
-            $gsqs[$d['MY_GRIDSQUARE']] = true;
+            if (isset($d['MY_GRIDSQUARE'])) {
+                $gsqs[$d['MY_GRIDSQUARE']] = true;
+            } else {
+                return false;
+            }
         }
         $gsqs = array_keys($gsqs);
         sort($gsqs);
@@ -518,6 +522,10 @@ class PS {
                 $adif =     new adif($file);
                 $data =     $adif->parser();
                 $MY_GRID =  PS::dataGetMyGrid($data);
+                if ($MY_GRID === false) {
+                    print PS::RED_BD . "ERROR - file " . $fn . " has no 'MY_GRIDSQUARE column\n";
+                    continue;
+                }
                 $dates =    PS::dataGetDates($data);
                 $date =     end($dates);
                 $LS =       PS::dataCountLogs($data, $date);
@@ -530,7 +538,7 @@ class PS {
                     PS::BLUE_BD . $parkId . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
                         PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
-                        PS::RED_BD . str_pad("ERROR - " . count($MY_GRID), 10, ' ')
+                        PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
                       ) . PS::GREEN_BD . " | "
                     . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
                     . str_pad($LT, 3, ' ', STR_PAD_LEFT) . " | "
@@ -869,6 +877,7 @@ class adif {
      * @repo          https://github.com/muneando/php-adif
      */
     private $data;
+    private $filename;
     private $records = [];
     private $options = [
         'code'	=> 'sjis-win',
@@ -878,6 +887,7 @@ class adif {
         $this->options = array_merge($this->options, $options);
         if (in_array(pathinfo($data, PATHINFO_EXTENSION), array('adi', 'adif'))) {
             $this->loadFile($data);
+            $this->filename = pathinfo($data, PATHINFO_FILENAME);
         } else {
             $this->loadData($data);
         }
@@ -886,8 +896,9 @@ class adif {
 
     protected function initialize() {
         $pos = strripos($this->data, '<EOH>');
-        if($pos === false) {
-            throw new Exception('<EOH> is not present in the ADFI file');
+        if ($pos === false) {
+            $this->data = "<EOH>" . $this->data;
+            $pos = 0;
         };
         $data = substr($this->data, $pos + 5, strlen($this->data) - $pos - 5);
         $data = str_replace(array("\r\n", "\r"), "\n", $data);
