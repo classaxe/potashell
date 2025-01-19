@@ -56,6 +56,8 @@ class PS {
     private $modeCheck;
     private $modeFix;
     private $modeHelp;
+    private $modeSpot;
+    private $modeSyntax;
     private $HTTPcontext;
     private $parkName;
     private $parkNameAbbr;
@@ -64,6 +66,8 @@ class PS {
     private $qrzPass;
     private $qrzSession;
     private $qrzUser;
+    private $spotKhz;
+    private $spotComment;
     private $version;
 
     public function __construct() {
@@ -74,13 +78,16 @@ class PS {
         $this->loadIni();
         $this->header();
         $this->checkQrz();
+        if ($this->modeSyntax) {
+            print $this->syntax();
+            return;
+        }
         if ($this->modeHelp) {
             $this->help();
-            $this->syntax();
             return;
         }
         if (!$this->modeAudit && $this->inputGSQ === null) {
-            $this->syntax();
+            print $this->syntax();
             $this->getUserArgs();
         }
         $this->process();
@@ -269,10 +276,14 @@ class PS {
         $arg1 = isset($argv[1]) ? $argv[1] : null;
         $arg2 = isset($argv[2]) ? $argv[2] : null;
         $arg3 = isset($argv[3]) ? $argv[3] : null;
+        $arg4 = isset($argv[4]) ? $argv[4] : null;
+        $arg5 = isset($argv[5]) ? $argv[5] : null;
         $this->modeAudit = false;
         $this->modeCheck = false;
         $this->modeFix = false;
         $this->modeHelp = false;
+        $this->modeSpot = false;
+        $this->modeSyntax = false;
         if ($arg1 && strtoupper($arg1) === 'AUDIT') {
             $this->modeAudit = true;
             return;
@@ -281,10 +292,19 @@ class PS {
             $this->modeHelp = true;
             return;
         }
+        if ($arg1 && strtoupper($arg1) === 'SYNTAX') {
+            $this->modeSyntax = true;
+            return;
+        }
         $this->inputPotaId = $arg1;
         $this->inputGSQ = $arg2;
         $this->modeCheck = $arg3 && strtoupper($arg3) === 'CHECK';
         $this->modeFix = $arg3 && strtoupper($arg3) === 'FIX';
+        $this->modeSpot = $arg3 && strtoupper($arg3) === 'SPOT';
+        if ($this->modeSpot) {
+            $this->spotKhz = $arg4;
+            $this->spotComment = $arg5;
+        }
     }
 
     private function getGSQForCall($callsign) {
@@ -372,13 +392,75 @@ class PS {
     private function help() {
         print PS::YELLOW_BD . "PURPOSE:" . PS::YELLOW ."\n"
             . "  This program works with WSJT-X log files to prepare them for upload to POTA.\n"
-            . "  1) It sets all " . PS::GREEN_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values to a user-supplied Maidenhead GSQ value.\n"
-            . "  2) It adds a new " . PS::GREEN_BD ."MY_CITY" . PS::YELLOW ." column to all rows, populated with the Park Name in this format:\n"
+            . "  1) It posts a 'Spot' to POTA with a given frequency, mode and park ID to alert \"hunters\".\n"
+            . "  2) It sets all " . PS::GREEN_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values to your supplied Maidenhead GSQ value.\n"
+            . "  3) It adds a new " . PS::GREEN_BD ."MY_CITY" . PS::YELLOW ." column to all rows, populated with the Park Name in this format:\n"
             . "     " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP" . PS::YELLOW . " - a POTA API lookup is used to obtain the park name.\n"
-            . "  3) It Fills in any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . " by contacting the QRZ Callbook service.\n"
-            . "  4) It archives or un-archives the park log file in question - see " . PS::YELLOW_BD . "SYNTAX" . PS::YELLOW ." for more details.\n\n"
+            . "  4) It Fills in any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . " by contacting the QRZ Callbook service.\n"
+            . "  5) It archives or un-archives the park log file in question - see " . PS::YELLOW_BD . "SYNTAX" . PS::YELLOW ." for more details.\n"
+            . "\n"
             . PS::YELLOW_BD . "CONFIGURATION:" . PS::YELLOW ."\n"
-            . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n\n";
+            . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n"
+            . "\n"
+            . PS::YELLOW_BD . "SYNTAX:\n"
+            . $this->syntax(1)
+            . "\n" . PS::YELLOW_BD
+            . "     a) PROMPTING FOR USER INPUTS:\n" . PS::YELLOW
+            . "       - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
+            . "       - Before any files are renamed or modified, the user is asked to confirm the operation.\n"
+            . "       - If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n"
+            . "\n" . PS::YELLOW_BD
+            . "     b) WITHOUT AN ACTIVE LOG FILE:\n" . PS::YELLOW
+            . "       - If there is NO active " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " log file, the system looks for a file\n"
+            . "         named " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW . ", and if found, it renames it to " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . "\n"
+            . "         so that the user can continue adding logs for this park.\n"
+            . "       - The WSJT-X program should be restarted at this point so that it can read or\n"
+            . "         create the " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " file.\n"
+            . "       - The user is then asked if they want to add a " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " for the park on the POTA website.\n"
+            . "         If they respond " . PS::RESPONSE_Y . ", they will be prompted for:\n" . PS::YELLOW_BD
+            . "         1. " . PS::YELLOW . "The frequency in KHz - e.g. " . PS::MAGENTA_BD . "14074\n" . PS::YELLOW_BD
+            . "         2. " . PS::YELLOW . "A comment to add to the spot - usually the intended mode such as " . PS::RED_BD . "FT4" . PS::YELLOW . " or " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
+            . "\n" . PS::YELLOW_BD
+            . "     c) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
+            . "       - If latest session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n"
+            . "       - If an active log session has completed, and the user confirms the operation:\n" . PS::YELLOW_BD
+            . "         1. " . PS::YELLOW . "The " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file is renamed to " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi\n" . PS::YELLOW_BD
+            . "         2. " . PS::YELLOW . "Any missing Gridsquares for the other party are looked up and inserted.\n" . PS::YELLOW_BD
+            . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all MY_GRIDSQUARE fields\n" . PS::YELLOW_BD
+            . "         4. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
+            . "         5. " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", they will then be prompted for the comment to post for\n"
+            . "            their spot, usually starting with the code " . PS::GREEN_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
+            . "            attempt has ended.  They may respond with " . PS::GREEN_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
+            . "\n" . PS::YELLOW_BD
+            . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
+            . "       - If the optional " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
+            . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
+            . "       - No files are renamed.\n"
+            . "\n" . PS::YELLOW_BD
+            . "     e) THE \"FIX\" MODE:\n" . PS::YELLOW
+            . "       - If the optional " . PS::GREEN_BD . "FIX" . PS::YELLOW . " argument is given, system operates directly on either\n"
+            . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
+            . "       - No files are renamed.\n"
+            . "\n" . PS::YELLOW_BD
+            . "     f) THE \"SPOT\" MODE:\n" . PS::YELLOW
+            . "       - If the optional " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, the adds a spot in the pota.app website.\n"
+            . "       - The next parameter indicates the frequency in KHz.\n"
+            . "       - The final parameter indicates the intended transmission mode.\n"
+            . "       - If the final parameter starts with the word \"QRT\", the spot is marked as closed.\n"
+            . "       - To include an optional message with the Mode or QRT identifier, use quotes around\n"
+            . "         the last parameter to group words together.\n"
+            . "       - To test this feature without having users respond, use " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " as the park ID.\n"
+            . "\n" . PS::YELLOW_BD
+            . $this->syntax(2)
+            . "       - The system reviews ALL archived Park Log files, and produces a report on their contents.\n"
+            . "\n" . PS::YELLOW_BD
+            . $this->syntax(3)
+            . "       - Detailed help is provided.\n"
+            . "\n" . PS::YELLOW_BD
+            . $this->syntax(4)
+            . "       - Raw syntax is provided is provided.\n"
+            . "\n" . PS::YELLOW . str_repeat('-', 90)
+            . PS::RESET ."\n";
     }
 
     private function loadIni() {
@@ -455,6 +537,11 @@ class PS {
 
         if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeFix) {
             $this->processParkFix();
+            return;
+        }
+
+        if ($this->modeSpot) {
+            $this->processParkSpot();
             return;
         }
 
@@ -724,6 +811,13 @@ class PS {
             . PS::RESET;
     }
 
+    private function processParkSpot() {
+        print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
+            . "  - Your spot at " . PS::BLUE_BD . $this->inputPotaId . PS::GREEN_BD . " on " . PS::RED_BD . $this->spotKhz . "kHz" . PS::GREEN_BD
+            . " has been published at pota.app for " . PS::CYAN_BD . $this->spotComment . PS::GREEN_BD . "\n"
+            . PS::RESET;
+    }
+
     private function processParkUnarchiving() {
         $adif = new adif($this->pathAdifLocal . $this->fileAdifPark);
         $data = $adif->parser();
@@ -764,49 +858,35 @@ class PS {
         }
         print PS::RESET;
     }
-    private function syntax() {
-        print PS::YELLOW_BD . "SYNTAX:\n"
-        . "  1. " . PS::WHITE_BD . "potashell" . PS::YELLOW . "\n"
-        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::YELLOW . "\n"
-        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::YELLOW . "\n"
-        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n" . PS::YELLOW_BD
-        . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "FIX\n" . PS::YELLOW_BD
-        . "\n"
-        . "     a) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
-        . "       - If an active log session has completed, this mode augments and archives\n"
-        . "         " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW ." to " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW ." ready for the next session to begin,\n"
-        . "         and you should manually restart " . PS::GREEN_BD ."WSJT-X" . PS::YELLOW ." to start logging to a new empty log file.\n"
-        . "       - If last session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n"
-        . "       - Refer to the " . PS::YELLOW_BD . "PURPOSE" . PS::YELLOW . " section in " . PS::YELLOW_BD . "HELP" . PS::YELLOW . " for the changes made.\n"
-        . "\n" . PS::YELLOW_BD
-        . "     b) WITHOUT AN ACTIVE LOG FILE:\n" . PS::YELLOW
-        . "       - If there is NO active " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " log file, the system looks for a file\n"
-        . "         named " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW . ", and if found, it renames it to " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . "\n"
-        . "         so that the user can continue adding logs for this park.\n"
-        . "\n" . PS::YELLOW_BD
-        . "     c) PROMPTING FOR USER INPUTS:\n" . PS::YELLOW
-        . "       - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
-        . "       - Before any files are renamed or modified, user is asked to confirm the operation.\n"
-        . "         If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n"
-        . "\n" . PS::YELLOW_BD
-        . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
-        . "       - If the optional " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
-        . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
-        . "       - No files are renamed.\n"
-        . "\n" . PS::YELLOW_BD
-        . "     e) THE \"FIX\" MODE:\n" . PS::YELLOW
-        . "       - If the optional " . PS::GREEN_BD . "FIX" . PS::YELLOW . " argument is given, system operates directly on either\n"
-        . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
-        . "       - No files are renamed.\n"
-        . "\n" . PS::YELLOW_BD
-        . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n"
-        . "     The system reviews ALL archived Park Log files, and produces a report on their contents.\n"
-        . "\n"
-        . PS::YELLOW_BD . "  3. " . PS::WHITE_BD . "potashell " . PS::YELLOW_BD . "HELP " . PS::YELLOW . "\n"
-        . "     More detailed help is provided, along with this syntax guide.\n"
-        . "\n"
-        . str_repeat('-', 90) . PS::RESET ."\n";
 
+    private function publishPotaSpot() {
+
+    }
+
+    private function syntax($step = false) {
+        switch ($step) {
+            case 1:
+                return PS::YELLOW_BD
+                . "  1. " . PS::WHITE_BD . "potashell\n"
+                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368\n"
+                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82\n"
+                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n"
+                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "FIX\n"
+                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT "
+                . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "FT8\n";
+            case 2:
+                return PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n";
+            case 3:
+                return PS::YELLOW_BD . "  3. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "HELP " . PS::YELLOW . "\n";
+            case 4:
+                return PS::YELLOW_BD . "  4. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "SYNTAX " . PS::YELLOW . "\n";
+            default:
+                return
+                    $this->syntax(1) . "\n"
+                    . $this->syntax(2) . "\n"
+                    . $this->syntax(3) . "\n"
+                    . $this->syntax(4) . PS::RESET;
+        }
     }
 
     private function uploadToQrz($data, $date) {
