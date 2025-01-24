@@ -54,7 +54,6 @@ class PS {
     private $inputPotaId;
     private $modeAudit;
     private $modeCheck;
-    private $modeFix;
     private $modeHelp;
     private $modeSpot;
     private $modeSyntax;
@@ -271,6 +270,50 @@ class PS {
         return $gsqs;
     }
 
+    private function fixData($data) {
+        $status = [
+            'COUNTRY' => [ 'missing' => 0, 'fixed' => 0],
+            'GRIDSQUARE' => [ 'missing' => 0, 'fixed' => 0],
+            'STATE' => [ 'missing' => 0, 'fixed' => 0]
+        ];
+
+        foreach ($data as &$record) {
+            if (empty($record)) {
+                continue;
+            }
+            if (empty($record['GRIDSQUARE'])) {
+                $status['GRIDSQUARE']['missing']++;
+                if ($record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL'])) {
+                    $status['GRIDSQUARE']['fixed']++;
+                };
+            }
+            if (empty($record['COUNTRY'])) {
+                $status['COUNTRY']['missing']++;
+                if ($record['COUNTRY'] = $this->getItuForCall($record['CALL'])) {
+                    $status['COUNTRY']['fixed']++;
+                }
+            }
+            switch ($record['COUNTRY']) {
+                case 'Australia':
+                case 'Canada':
+                case 'United States':
+                    if (empty($record['STATE'])) {
+                        $status['STATE']['missing']++;
+                        if ($record['STATE'] = $this->getSpForCall($record['CALL'])) {
+                            $status['STATE']['fixed']++;
+                        }
+                    }
+                    break;
+            }
+            $record['MY_GRIDSQUARE'] = $this->inputGSQ;
+            $record['MY_CITY'] = $this->parkNameAbbr;
+        }
+        return [
+            'data' => $this->orderData($data),
+            'status' => $status
+        ];
+    }
+
     private function getCliArgs() {
         global $argv;
         $arg1 = isset($argv[1]) ? $argv[1] : null;
@@ -280,7 +323,6 @@ class PS {
         $arg5 = isset($argv[5]) ? $argv[5] : null;
         $this->modeAudit = false;
         $this->modeCheck = false;
-        $this->modeFix = false;
         $this->modeHelp = false;
         $this->modeSpot = false;
         $this->modeSyntax = false;
@@ -299,7 +341,6 @@ class PS {
         $this->inputPotaId = $arg1;
         $this->inputGSQ = $arg2;
         $this->modeCheck = $arg3 && strtoupper($arg3) === 'CHECK';
-        $this->modeFix = $arg3 && strtoupper($arg3) === 'FIX';
         $this->modeSpot = $arg3 && strtoupper($arg3) === 'SPOT';
         if ($this->modeSpot) {
             $this->spotKhz = $arg4;
@@ -307,23 +348,47 @@ class PS {
         }
     }
 
-    private function getGSQForCall($callsign) {
+    private function getInfoForCall($callsign) {
+        static $dataCache = [];
         if (empty($this->qrzSession)) {
             return false;
         }
-        $url = sprintf(
-            "https://xmldata.qrz.com/xml/current/?s=%s;callsign=%s;agent=%s",
-            urlencode($this->qrzSession),
-            urlencode($callsign),
-            urlencode(PS::USERAGENT)
-        );
-        $xml = file_get_contents($url, false, $this->HTTPcontext);
-        $data = simplexml_load_string($xml);
+        if (!isset($dataCache[$callsign])) {
+            $url = sprintf(
+                "https://xmldata.qrz.com/xml/current/?s=%s;callsign=%s;agent=%s",
+                urlencode($this->qrzSession),
+                urlencode($callsign),
+                urlencode(PS::USERAGENT)
+            );
+            $xml = file_get_contents($url, false, $this->HTTPcontext);
+            $dataCache[$callsign] = simplexml_load_string($xml);
+        }
+        return $dataCache[$callsign];
+    }
+
+    private function getGSQForCall($callsign) {
+        $data = $this->getInfoForCall($callsign);
         if (empty($data->Callsign->grid)) {
             print PS::RED_BD . "    WARNING: - No gridsquare found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
+            return null;
         }
-        return isset($data->Callsign->grid) ? $data->Callsign->grid : null;
+        return $data->Callsign->grid;
     }
+
+    private function getItuForCall($callsign) {
+        $data = $this->getInfoForCall($callsign);
+        if (empty($data->Callsign->country)) {
+            print PS::RED_BD . "    WARNING: - No country found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
+            return null;
+        }
+        return $data->Callsign->country;
+    }
+
+    private function getSpForCall($callsign) {
+        $data = $this->getInfoForCall($callsign);
+        return isset($data->Callsign->state) ? strtoupper($data->Callsign->state) : null;
+    }
+
 
     private function getHTTPContext() {
         $this->HTTPcontext = stream_context_create([
@@ -356,7 +421,7 @@ class PS {
     }
 
     private function getUserArgs() {
-        print PS::YELLOW_BD . "ARGUMENTS:\n";
+        print "\n" . PS::YELLOW_BD . "ARGUMENTS:\n";
         if ($this->inputPotaId === null) {
             print PS::GREEN_BD . "  - Please provide POTA Park ID:  " . PS::BLUE_BD;
             $fin = fopen("php://stdin","r");
@@ -371,33 +436,27 @@ class PS {
         } else {
             print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->inputGSQ . "\n";
         }
-        if ($this->modeFix) {
-            print PS::GREEN_BD . "  - FIX operation specified:      " . PS::RESPONSE_Y . "\n";
-        }
         $this->parkName = "POTA: " . $this->inputPotaId;
         print "\n";
     }
 
     private function header() {
-        if (!$this->modeFix) {
-            print PS::CLS;
-        }
-        print PS::YELLOW
-            . "**************\n"
-            . "* POTA SHELL *\n"
-            . "**************\n"
-            . "\n";
+        print PS::CLS . PS::YELLOW
+        . "**************\n"
+        . "* POTA SHELL *\n"
+        . "**************\n"
+        . "\n";
     }
 
     private function help() {
         print PS::YELLOW_BD . "PURPOSE:" . PS::YELLOW ."\n"
             . "  This program works with WSJT-X log files to prepare them for upload to POTA.\n"
-            . "  1) It posts a 'Spot' to POTA with a given frequency, mode and park ID to alert \"hunters\".\n"
-            . "  2) It sets all " . PS::GREEN_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values to your supplied Maidenhead GSQ value.\n"
-            . "  3) It adds a new " . PS::GREEN_BD ."MY_CITY" . PS::YELLOW ." column to all rows, populated with the Park Name in this format:\n"
+            . "  1) It sets all " . PS::GREEN_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values to your supplied Maidenhead GSQ value.\n"
+            . "  2) It adds a new " . PS::GREEN_BD ."MY_CITY" . PS::YELLOW ." column to all rows, populated with the Park Name in this format:\n"
             . "     " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP" . PS::YELLOW . " - a POTA API lookup is used to obtain the park name.\n"
-            . "  4) It Fills in any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . " by contacting the QRZ Callbook service.\n"
-            . "  5) It archives or un-archives the park log file in question - see " . PS::YELLOW_BD . "SYNTAX" . PS::YELLOW ." for more details.\n"
+            . "  3) It obtains missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values from the QRZ Callbook service.\n"
+            . "  4) It archives or un-archives the park log file in question - see below for more details.\n"
+//            . "  5) It can post a " . PS::GREEN_BD ."SPOT" . PS::YELLOW ." to POTA with a given frequency, mode and park ID to alert \"hunters\".\n"
             . "\n"
             . PS::YELLOW_BD . "CONFIGURATION:" . PS::YELLOW ."\n"
             . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n"
@@ -416,41 +475,39 @@ class PS {
             . "         so that the user can continue adding logs for this park.\n"
             . "       - The WSJT-X program should be restarted at this point so that it can read or\n"
             . "         create the " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " file.\n"
-            . "       - The user is then asked if they want to add a " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " for the park on the POTA website.\n"
-            . "         If they respond " . PS::RESPONSE_Y . ", they will be prompted for:\n" . PS::YELLOW_BD
-            . "         1. " . PS::YELLOW . "The frequency in KHz - e.g. " . PS::MAGENTA_BD . "14074\n" . PS::YELLOW_BD
-            . "         2. " . PS::YELLOW . "A comment to add to the spot - usually the intended mode such as " . PS::RED_BD . "FT4" . PS::YELLOW . " or " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
+//            . "       - The user is then asked if they want to add a " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " for the park on the POTA website.\n"
+//            . "         If they respond " . PS::RESPONSE_Y . ", they will be prompted for:\n" . PS::YELLOW_BD
+//            . "         1. " . PS::YELLOW . "The frequency in KHz - e.g. " . PS::MAGENTA_BD . "14074\n" . PS::YELLOW_BD
+//            . "         2. " . PS::YELLOW . "A comment to add to the spot - usually the intended mode such as " . PS::RED_BD . "FT4" . PS::YELLOW . " or " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
             . "\n" . PS::YELLOW_BD
             . "     c) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
             . "       - If latest session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n"
+            . "       - If the log contains logs from more than one location, the process is halted.\n"
             . "       - If an active log session has completed, and the user confirms the operation:\n" . PS::YELLOW_BD
             . "         1. " . PS::YELLOW . "The " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file is renamed to " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi\n" . PS::YELLOW_BD
-            . "         2. " . PS::YELLOW . "Any missing Gridsquares for the other party are looked up and inserted.\n" . PS::YELLOW_BD
-            . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all MY_GRIDSQUARE fields\n" . PS::YELLOW_BD
-            . "         4. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
-            . "         5. " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", they will then be prompted for the comment to post for\n"
-            . "            their spot, usually starting with the code " . PS::GREEN_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
-            . "            attempt has ended.  They may respond with " . PS::GREEN_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
+            . "         2. " . PS::YELLOW . "Any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n" . PS::YELLOW_BD
+            . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all " . PS::GREEN_BD . "MY_GRIDSQUARE" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
+            . "         4. " . PS::YELLOW . "The correct parkname - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP" . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
+//            . "         5. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
+//            . "         6. " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", they will then be prompted for the comment to post for\n"
+//            . "            their spot, usually starting with the code " . PS::GREEN_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
+//            . "            attempt has ended.  They may respond with " . PS::GREEN_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
             . "\n" . PS::YELLOW_BD
             . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
             . "       - If the optional " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
             . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
+            . "       - Missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n"
             . "       - No files are renamed.\n"
             . "\n" . PS::YELLOW_BD
-            . "     e) THE \"FIX\" MODE:\n" . PS::YELLOW
-            . "       - If the optional " . PS::GREEN_BD . "FIX" . PS::YELLOW . " argument is given, system operates directly on either\n"
-            . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
-            . "       - No files are renamed.\n"
-            . "\n" . PS::YELLOW_BD
-            . "     f) THE \"SPOT\" MODE:\n" . PS::YELLOW
-            . "       - If the optional " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, the adds a spot in the pota.app website.\n"
-            . "       - The next parameter indicates the frequency in KHz.\n"
-            . "       - The final parameter indicates the intended transmission mode.\n"
-            . "       - If the final parameter starts with the word \"QRT\", the spot is marked as closed.\n"
-            . "       - To include an optional message with the Mode or QRT identifier, use quotes around\n"
-            . "         the last parameter to group words together.\n"
-            . "       - To test this feature without having users respond, use " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " as the park ID.\n"
-            . "\n" . PS::YELLOW_BD
+//            . "     e) THE \"SPOT\" MODE:\n" . PS::YELLOW
+//            . "       - If the optional " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, the adds a spot in the pota.app website.\n"
+//            . "       - The next parameter indicates the frequency in KHz.\n"
+//            . "       - The final parameter indicates the intended transmission mode.\n"
+//            . "       - If the final parameter starts with the word \"QRT\", the spot is marked as closed.\n"
+//            . "       - To include an optional message with the Mode or QRT identifier, use quotes around\n"
+//            . "         the last parameter to group words together.\n"
+//            . "       - To test this feature without having users respond, use " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " as the park ID.\n"
+//            . "\n" . PS::YELLOW_BD
             . $this->syntax(2)
             . "       - The system reviews ALL archived Park Log files, and produces a report on their contents.\n"
             . "\n" . PS::YELLOW_BD
@@ -458,7 +515,7 @@ class PS {
             . "       - Detailed help is provided.\n"
             . "\n" . PS::YELLOW_BD
             . $this->syntax(4)
-            . "       - Raw syntax is provided is provided.\n"
+            . "       - Basic syntax is provided.\n"
             . "\n" . PS::YELLOW . str_repeat('-', 90)
             . PS::RESET ."\n";
     }
@@ -505,6 +562,51 @@ class PS {
         }
     }
 
+    private function orderData($data) {
+        $ordered = [];
+        $keys = [
+            'QSO_DATE',
+            'TIME_ON',
+            'CALL',
+            'MODE',
+            'BAND',
+            'FREQ',
+            'STATE',
+            'COUNTRY',
+            'GRIDSQUARE',
+            'RST_SENT',
+            'RST_RCVD',
+            'QSO_DATE_OFF',
+            'TIME_OFF',
+            'STATION_CALLSIGN',
+            'MY_GRIDSQUARE',
+            'MY_CITY',
+            'TX_PWR',
+        ];
+        // Not using <=> for PHP 5.6 compatability
+        usort($data, function ($a, $b) {
+            if ($a['TIME_ON'] > $b['TIME_ON']) { return 1; }
+            if ($a['TIME_ON'] < $b['TIME_ON']) { return -1; }
+            return 0;
+        });
+        usort($data, function ($a, $b) {
+            if ($a['QSO_DATE'] > $b['QSO_DATE']) { return 1; }
+            if ($a['QSO_DATE'] < $b['QSO_DATE']) { return -1; }
+            return 0;
+        });
+        foreach ($data as $record) {
+            $out = [];
+            foreach ($keys as $key) {
+                if (!isset($record[$key])) {
+                    continue;
+                }
+                $out[$key] = $record[$key];
+            }
+            $ordered[] = $out;
+        }
+        return $ordered;
+    }
+
     private function process() {
         print PS::YELLOW_BD . "STATUS:\n";
         if (!$this->modeAudit && (!$this->inputPotaId || !$this->inputGSQ)) {
@@ -532,11 +634,6 @@ class PS {
 
         if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeCheck) {
             $this->processParkCheck();
-            return;
-        }
-
-        if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeFix) {
-            $this->processParkFix();
             return;
         }
 
@@ -594,7 +691,7 @@ class PS {
             . "  #ST = Sessions in Total\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', $lineLen) . "\n"
-            . "POTA ID | MY_GRID    | #LS | #LT | #MG | #SA | #FA | #ST | Park Name in Log File\n"
+            . "POTA ID  | MY_GRID    | #LS | #LT | #MG | #SA | #FA | #ST | Park Name in Log File\n"
             . str_repeat('-', $lineLen) . "\n";
         $i = 0;
         foreach ($files as $file) {
@@ -622,7 +719,7 @@ class PS {
                 $AT =       PS::dataCountActivations($data);
                 $FT =       $ST - $AT;
                 print
-                    PS::BLUE_BD . $parkId . PS::GREEN_BD . " | "
+                    PS::BLUE_BD . str_pad($parkId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
                         PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
                         PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
@@ -633,7 +730,7 @@ class PS {
                     . str_pad($AT, 3, ' ', STR_PAD_LEFT) . " | "
                     . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
                     . str_pad($ST, 3, ' ', STR_PAD_LEFT) . " | "
-                    . PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD . "\n";
+                    . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . "Lookup failed" . PS::GREEN_BD) . "\n";
             }
         }
         print str_repeat('-', $lineLen) . PS::RESET . "\n";
@@ -646,7 +743,6 @@ class PS {
         $last =     end($dates);
         $logs =     $this->dataCountLogs($data, $last);
         $MGs1 =     $this->dataCountMissingGsq($data);
-        $MGs2 =     $MGs1;
         $locs =     $this->dataGetLocations($data);
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
@@ -702,20 +798,10 @@ class PS {
             $this->pathAdifLocal . $this->fileAdifWsjtx,
             $this->pathAdifLocal . $this->fileAdifPark
         );
-        foreach ($data as &$record) {
-            if (empty($record)) {
-                continue;
-            }
-            if (empty($record['GRIDSQUARE'])) {
-                $record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL']);
-                if (!empty($record['GRIDSQUARE'])) {
-                    $MGs2 --;
-                }
-            }
-            $record['MY_GRIDSQUARE'] = $this->inputGSQ;
-            $record['MY_CITY'] = $this->parkNameAbbr;
-        }
-        $adif = $adif->toAdif($data, $this->version);
+        $result =   $this->fixData($data);
+        $data =     $result['data'];
+        $status =   $result['status'];
+        $adif =     $adif->toAdif($data, $this->version);
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
         $stats = false;
         if ($this->qrzApiKey) {
@@ -727,8 +813,13 @@ class PS {
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
             . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
             . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::RED_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n"
-            . (!empty($this->qrzSession) && $MGs1 ? "  - Obtained " . PS::RED_BD . ($MGs2 ?
-                ($MGs1 - $MGs2) . " of " . $MGs1 : $MGs1) . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
+            . (!empty($this->qrzSession) && $status['GRIDSQUARE']['missing'] ? "  - Obtained " . PS::RED_BD
+                . ($status['GRIDSQUARE']['fixed'] ?
+                    ($status['GRIDSQUARE']['missing'] - $status['GRIDSQUARE']['fixed']) . " of " . $status['GRIDSQUARE']['missing']
+                :
+                    $status['GRIDSQUARE']['missing']
+                )
+                . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
             . ($stats ?
                   "  - Uploaded " . $logs . " Logs to QRZ.com:\n"
@@ -751,64 +842,36 @@ class PS {
         $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
         $adif =     new adif($this->pathAdifLocal . $fileAdif);
         $data =     $adif->parser();
+        $result =   $this->fixData($data);
+        $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
         $last =     end($dates);
         $logs =     $this->dataCountLogs($data, $last);
-        $MGs1 =     $this->dataCountMissingGsq($data);
+        $MGs =      $this->dataCountMissingGsq($data);
         $locs =     $this->dataGetLocations($data);
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
-            . ($MGs1 ? "  - There are " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares\n" : "")
+            . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
             . "  - Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
             . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n"
+
+
             . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
-                PS::RED_BD ."  * There are " . count($locs) . " named log locations contained within this one file:\n"
-                . "    - " .implode("\n    - ", $locs) . "\n". PS::GREEN_BD : ''
+                print PS::RED_BD ."\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
+                    . "    - " .implode("\n    - ", $locs) . "\n  * The operation has been cancelled.\n"
+                : ""
             )
             . PS::RESET;
-    }
 
-    private function processParkFix() {
-        $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
-        $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
-        $adif = new adif($this->pathAdifLocal . $fileAdif);
-        $data = $adif->parser();
-        $MGs = 0;
-        $FGs = 0;
-        $locs = self::dataGetLocations($data);
         if (count($locs) > 1) {
-            print PS::RED_BD ."\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
-                . "    - " .implode("\n    - ", $locs) . "\n  * The operation has been cancelled.\n". PS::RESET;
             return;
         }
-        foreach ($data as &$record) {
-            if (empty($record)) {
-                continue;
-            }
-            if (empty($record['GRIDSQUARE'])) {
-                $MGs++;
-                if ($record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL'])) {
-                    $FGs++;
-                };
-            }
-            $record['MY_GRIDSQUARE'] = $this->inputGSQ;
-            $record['MY_CITY'] = $this->parkNameAbbr;
-        }
+
         $adif = $adif->toAdif($data, $this->version);
         file_put_contents($this->pathAdifLocal . $fileAdif, $adif);
-        print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
-            . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD . " with "
-            . PS::CYAN_BD . count($data) . PS::GREEN_BD . " records has been fixed.\n"
-            . ($MGs ?
-                "  - " . PS::CYAN_BD . $MGs . PS::GREEN_BD . " missing gridsquare" . ($MGs > 1 ? "s were " : " was ")
-                . (!empty($this->qrzSession) ? "fixed\n" : "NOT fixed, due to invalid QRZ callsign and password values\n    in " . PS::BLUE_BD . "potashell.ini" . PS::GREEN_BD . "\n")
-                :
-                ""
-            )
-            . PS::RESET;
     }
 
     private function processParkSpot() {
@@ -834,7 +897,7 @@ class PS {
                 . PS::RESET;
             return;
         }
-        print PS::YELLOW_BD . "OPERATION:\n"
+        print PS::YELLOW_BD . "PENDING OPERATION:\n"
             . PS::GREEN_BD . "  - Rename archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " to " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD ."\n"
             . "  - Resume logging at park " . PS::RED_BD . "{$this->parkName}" . PS::GREEN_BD . "\n\n"
             . PS::YELLOW_BD . "CHOICE:\n" . PS::GREEN_BD . "    Continue with operation? (Y/N) ";
@@ -867,13 +930,12 @@ class PS {
         switch ($step) {
             case 1:
                 return PS::YELLOW_BD
-                . "  1. " . PS::WHITE_BD . "potashell\n"
-                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368\n"
-                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82\n"
-                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n"
-                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "FIX\n"
-                . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT "
-                . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "FT8\n";
+                    . "  1. " . PS::WHITE_BD . "potashell\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n"
+//                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "FT8\n"
+                    ;
             case 2:
                 return PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n";
             case 3:
@@ -1065,10 +1127,6 @@ class adif {
     }
 
     public static function toAdif($data, $version, $raw = false) {
-        
-        // construct an adif string out of data
-        // construct header, (copied from an adif file)
-
         $output = ($raw ? "" : "ADIF Export from POTASHELL\n"
             . "https://github.com/classaxe/potashell\n"
             . "Copyright (C) 2024, Martin Francis, James Fraser - classaxe.com\n"
@@ -1080,11 +1138,11 @@ class adif {
             . "\n"
         );
 
-        // construct records
-        // format seems to be <FIELD_NAME:DATALENGTH>DATA*space* (more fields) <eor>
-
         foreach($data as $row) {
             foreach ($row as $key => $value) {
+                if (!$value) {
+                    continue;
+                }
                 $output .=  "<" . $key . ":" . mb_strlen($value) . ">" . $value . " ";
             }
             $output .= "<EOR>" . ($raw ? "" : "\r\n");
