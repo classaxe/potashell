@@ -92,6 +92,24 @@ class PS {
         $this->process();
     }
 
+    private static function calculateDX($latFrom, $lonFrom, $latTo, $lonTo, $earthRadius = 6371000) {
+// Convert from degrees to radians
+        $latFrom = deg2rad($latFrom);
+        $lonFrom = deg2rad($lonFrom);
+        $latTo = deg2rad($latTo);
+        $lonTo = deg2rad($lonTo);
+
+        $latDelta = $latTo - $latFrom;
+        $lonDelta = $lonTo - $lonFrom;
+
+        $a = sin($latDelta / 2) * sin($latDelta / 2) +
+            cos($latFrom) * cos($latTo) *
+            sin($lonDelta / 2) * sin($lonDelta / 2);
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return $earthRadius * $c; // Distance in meters
+    }
+
     private function checkPhp() {
         if (!extension_loaded('mbstring')) {
             print PS::RED_BD . "ERROR:\n  PHP mbstring extension is not available.\n  (PHP " . phpversion() . ")\n" . PS::RESET;
@@ -198,6 +216,46 @@ class PS {
         }
     }
 
+    public static function convertGsqToDegrees($GSQ) {
+        $regExp =
+            '/^(?:[a-rA-R]{2}[0-9]{2}|'                                 // FN03
+            .'[a-rA-R]{2}[0-9]{2}[a-xA-X]{2}|'                          // FN03HR
+            .'[a-rA-R]{2}[0-9]{2}[a-xA-X]{2}[0-9]{2}|'                  // FN03HR72
+            .'[a-rA-R]{2}[0-9]{2}[a-xA-X]{2}[0-9]{2}[a-xA-X]{2})$/i';   // FN03HR72VO
+
+        if (!preg_match($regExp, $GSQ)) {
+            return false;
+        }
+        $_GSQ =      strToUpper($GSQ);
+        if (strlen($_GSQ) === 4) {
+            $_GSQ = $_GSQ."LL";
+        }
+        if (strlen($_GSQ) === 6) {
+            $_GSQ = $_GSQ."55";
+        }
+        if (strlen($_GSQ) === 8) {
+            $_GSQ = $_GSQ."XX";
+        }
+        $lat=
+            (ord($_GSQ[1])-65) * 10 - 90 +
+            (ord($_GSQ[3])-48) +
+            (ord($_GSQ[5])-65) / 24 +
+            (ord($_GSQ[7])-48) / 240 +
+            (ord($_GSQ[9])-65) / 5760;
+        $lon=
+            (ord($_GSQ[0])-65) * 20 - 180 +
+            (ord($_GSQ[2])-48) * 2 +
+            (ord($_GSQ[4])-65) / 12 +
+            (ord($_GSQ[6])-48) / 120 +
+            (ord($_GSQ[8])-65) / 2880;
+
+        return [
+            "gsq" => $GSQ,
+            "lat" => round($lat, 4),
+            "lon" => round($lon, 4)
+        ];
+    }
+
     private static function dataCountActivations($data) {
         $dates = [];
         foreach ($data as $d) {
@@ -215,6 +273,26 @@ class PS {
         return $activations;
     }
 
+    private static function dataGetCountries($data, $date = null) {
+        $countries = [];
+        foreach ($data as $d) {
+            if (!$date || $d['QSO_DATE'] == $date) {
+                $countries[$d['COUNTRY']] = true;
+            }
+        }
+        return $countries;
+    }
+
+    private static function dataGetBestDx($data, $date = null) {
+        $DX = 0;
+        foreach ($data as $d) {
+            if (!$date || $d['QSO_DATE'] == $date && !empty($d['DX']) && $d['DX'] > $DX) {
+                $DX = $d['DX'];
+            }
+        }
+        return $DX;
+    }
+
     private static function dataGetLocations($data) {
         $unique = [];
         foreach ($data as $d) {
@@ -224,6 +302,16 @@ class PS {
             $unique[$d['MY_CITY']] = true;
         }
         return array_keys($unique);
+    }
+
+    private static function dataGetStates($data, $date = null) {
+        $states = [];
+        foreach ($data as $d) {
+            if (!$date || $d['QSO_DATE'] == $date) {
+                $states[$d['STATE']] = true;
+            }
+        }
+        return $states;
     }
 
     private static function dataCountLogs($data, $date = null) {
@@ -307,6 +395,11 @@ class PS {
             }
             $record['MY_GRIDSQUARE'] = $this->inputGSQ;
             $record['MY_CITY'] = $this->parkNameAbbr;
+            $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
+            $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
+            if ($myLatLon && $theirLatLon) {
+                $record['DX'] = round(static::calculateDX($myLatLon['lat'], $myLatLon['lon'], $theirLatLon['lat'], $theirLatLon['lon']) / 1000);
+            }
         }
         return [
             'data' => $this->orderData($data),
@@ -582,6 +675,7 @@ class PS {
             'MY_GRIDSQUARE',
             'MY_CITY',
             'TX_PWR',
+            'DX'
         ];
         // Not using <=> for PHP 5.6 compatability
         usort($data, function ($a, $b) {
@@ -849,14 +943,19 @@ class PS {
         $logs =     $this->dataCountLogs($data, $last);
         $MGs =      $this->dataCountMissingGsq($data);
         $locs =     $this->dataGetLocations($data);
+        $countries = $this->dataGetCountries($data, $last);
+        $dx =       $this->dataGetBestDx($data, $last);
+        $states =   $this->dataGetStates($data, $last);
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD
             . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
             . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
-            . "  - Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
-            . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n"
-
-
+            . "  - Stats for last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . ":\n"
+            . "    There were " . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's')
+            . " from " . PS::MAGENTA_BD . count($countries) . PS::GREEN_BD . " " . (count($countries) === 1 ? "country" : "countries")
+            . (count($states) ? " and " . PS::MAGENTA_BD . count($states) . PS::GREEN_BD . " state" . (count($countries) === 1 ? "" : "s") : "")
+            . " - best DX was " . PS::MAGENTA_BD . $dx . PS::GREEN_BD . " KM."
+            . "\n"
             . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
