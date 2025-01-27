@@ -30,11 +30,13 @@ class PS {
     const RESET =       "\e[0m";
 
     const NAME_SUBS = [
+        '–' =>                          '-',
         'Conservation Area' =>          'CA',
         'Conservation Park' =>          'CP',
         'Conservation Reserve' =>       'CR',
         'District Park' =>              'DP',
         'for Conservation' =>           'for Cons',
+        'Heritage Trail' =>             'HT',
         'National Historic Site' =>     'NHS',
         'National Park' =>              'NP',
         'National Recreation Trail' =>  'NRT',
@@ -42,6 +44,7 @@ class PS {
         'Provincial Nature Reserve' =>  'PNR',
         'Provincial Park' =>            'PP',
         'Recreation Park' =>            'Rec P',
+        'Recreation Site' =>            'Rec S',
         'Regional Park' =>              'Reg P',
         'Wilderness Park' =>            'WP',
     ];
@@ -276,7 +279,7 @@ class PS {
     private static function dataGetCountries($data, $date = null) {
         $countries = [];
         foreach ($data as $d) {
-            if (!$date || $d['QSO_DATE'] == $date) {
+            if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['COUNTRY'])) {
                 $countries[$d['COUNTRY']] = true;
             }
         }
@@ -286,7 +289,7 @@ class PS {
     private static function dataGetBestDx($data, $date = null) {
         $DX = 0;
         foreach ($data as $d) {
-            if (!$date || $d['QSO_DATE'] == $date && !empty($d['DX']) && $d['DX'] > $DX) {
+            if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['DX']) && $d['DX'] > $DX) {
                 $DX = $d['DX'];
             }
         }
@@ -307,7 +310,7 @@ class PS {
     private static function dataGetStates($data, $date = null) {
         $states = [];
         foreach ($data as $d) {
-            if (!$date || $d['QSO_DATE'] == $date) {
+            if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['STATE'])) {
                 $states[$d['STATE']] = true;
             }
         }
