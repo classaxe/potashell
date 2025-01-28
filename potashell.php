@@ -695,10 +695,7 @@ class PS {
         foreach ($data as $record) {
             $out = [];
             foreach ($keys as $key) {
-                if (!isset($record[$key])) {
-                    continue;
-                }
-                $out[$key] = $record[$key];
+                $out[$key] = isset($record[$key]) ? $record[$key] : "";
             }
             $ordered[] = $out;
         }
@@ -899,7 +896,7 @@ class PS {
         $result =   $this->fixData($data);
         $data =     $result['data'];
         $status =   $result['status'];
-        $adif =     $adif->toAdif($data, $this->version);
+        $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
         $stats = false;
         if ($this->qrzApiKey) {
@@ -973,7 +970,7 @@ class PS {
             return;
         }
 
-        $adif = $adif->toAdif($data, $this->version);
+        $adif = $adif->toAdif($data, $this->version, false, true);
         file_put_contents($this->pathAdifLocal . $fileAdif, $adif);
     }
 
@@ -1060,7 +1057,7 @@ class PS {
             if ($record['QSO_DATE'] !== (string) $date) {
                 continue;
             }
-            $adifRecords[] = adif::toAdif([$record], $this->version, true);
+            $adifRecords[] = adif::toAdif([$record], $this->version, true, false);
         }
         $stats = [
             'ERROR' => 0,
@@ -1229,7 +1226,7 @@ class adif {
         return $datas;
     }
 
-    public static function toAdif($data, $version, $raw = false) {
+    public static function toAdif($data, $version, $raw = false, $allFields = false) {
         $output = ($raw ? "" : "ADIF Export from POTASHELL\n"
             . "https://github.com/classaxe/potashell\n"
             . "Copyright (C) 2024, Martin Francis, James Fraser - classaxe.com\n"
@@ -1240,10 +1237,9 @@ class adif {
             . "<EOH>\n"
             . "\n"
         );
-
         foreach($data as $row) {
             foreach ($row as $key => $value) {
-                if (!$value) {
+                if (!$value && !$allFields) {
                     continue;
                 }
                 $output .=  "<" . $key . ":" . mb_strlen($value) . ">" . $value . " ";
