@@ -468,7 +468,7 @@ class PS {
             print PS::RED_BD . "    WARNING: - No gridsquare found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
             return null;
         }
-        return $data->Callsign->grid;
+        return (string) $data->Callsign->grid;
     }
 
     private function getItuForCall($callsign) {
@@ -477,12 +477,12 @@ class PS {
             print PS::RED_BD . "    WARNING: - No country found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
             return null;
         }
-        return $data->Callsign->country;
+        return (string) $data->Callsign->country;
     }
 
     private function getSpForCall($callsign) {
         $data = $this->getInfoForCall($callsign);
-        return isset($data->Callsign->state) ? strtoupper($data->Callsign->state) : null;
+        return isset($data->Callsign->state) ? strtoupper((string) $data->Callsign->state) : null;
     }
 
 
@@ -665,6 +665,7 @@ class PS {
             'TIME_ON',
             'CALL',
             'MODE',
+            'SUBMODE',
             'BAND',
             'FREQ',
             'STATE',
