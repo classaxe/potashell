@@ -10,6 +10,15 @@
 
 [WSJTX]
 ; Set this to the directory where your WSJT-X datafiles are stored
+; Run WSJT-X and choose 'Open log directory' from the File menu to see
+; your log files folder
+;
+; PC USERS - your path will look like this:
+; log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
+;
+; MAC USERS = your path will look like this:
+; log_directory = "/Users/Username/Library/Application Support/WSJT-X"
+;
 log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
 
 [QRZ]

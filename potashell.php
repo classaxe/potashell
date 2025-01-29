@@ -9,6 +9,29 @@
  *****************************************/
 class PS {
     const ACTIVATION_LOGS = 10;
+    const ADI_COLUMNS = [
+        'QSO_DATE',
+        'TIME_ON',
+        'CALL',
+        'MODE',
+        'SUBMODE',
+        'BAND',
+        'FREQ',
+        'STATE',
+        'COUNTRY',
+        'GRIDSQUARE',
+        'RST_SENT',
+        'RST_RCVD',
+        'QSO_DATE_OFF',
+        'TIME_OFF',
+        'STATION_CALLSIGN',
+        'MY_GRIDSQUARE',
+        'MY_CITY',
+        'TX_PWR',
+        'COMMENT',
+        'DX'
+    ];
+
     const USERAGENT =   "POTASHELL v%s | https://github.com/classaxe/potashell | Copyright (C) %s Martin Francis VA3PHP";
     const RED =         "\e[0;31m";
     const RED_BD =      "\e[1;31m";
@@ -283,7 +306,8 @@ class PS {
                 $countries[$d['COUNTRY']] = true;
             }
         }
-        return $countries;
+        ksort($countries);
+        return array_keys($countries);
     }
 
     private static function dataGetBestDx($data, $date = null) {
@@ -314,7 +338,8 @@ class PS {
                 $states[$d['STATE']] = true;
             }
         }
-        return $states;
+        ksort($states);
+        return array_keys($states);
     }
 
     private static function dataCountLogs($data, $date = null) {
@@ -633,11 +658,11 @@ class PS {
                     PS::RED_BD . "  It has now been created.\n"
                     . "  Please edit the new " . PS::BLUE_BD . $filename . PS::RED_BD ." file, and supply your own values.\n";
             }
-            print PS::RESET;
+            print PS::RESET . "\n";
             die(0);
         };
         if (!$this->config = @parse_ini_file($filename, true)) {
-            print PS::RED_BD . "ERROR:\n  Unable to parse {$filename} file.\n" . PS::RESET;
+            print PS::RED_BD . "ERROR:\n  Unable to parse {$filename} file.\n" . PS::RESET . "\n";
             die(0);
         };
         $this->pathAdifLocal = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
@@ -646,7 +671,8 @@ class PS {
             print
                 PS::RED_BD . "ERROR:\n"
                 . "  The specified " . PS::CYAN_BD . "[WSJTX] log_directory" . PS::RED_BD . " specified in " . PS::BLUE_BD . $filename . PS::RED_BD ." doesn't exist.\n"
-                . "  Please edit " . PS::BLUE_BD . $filename . PS::RED_BD ." and set the correct path to your WSJT-X log files.\n" . PS::RESET;
+                . "  Please edit " . PS::BLUE_BD . $filename . PS::RED_BD ." and set the correct path to your WSJT-X log files.\n"
+                . PS::RESET . "\n";
             die(0);
         }
         if (!empty($this->config['QRZ']['callsign']) && !empty($this->config['QRZ']['password'])) {
@@ -660,27 +686,6 @@ class PS {
 
     private function orderData($data) {
         $ordered = [];
-        $keys = [
-            'QSO_DATE',
-            'TIME_ON',
-            'CALL',
-            'MODE',
-            'SUBMODE',
-            'BAND',
-            'FREQ',
-            'STATE',
-            'COUNTRY',
-            'GRIDSQUARE',
-            'RST_SENT',
-            'RST_RCVD',
-            'QSO_DATE_OFF',
-            'TIME_OFF',
-            'STATION_CALLSIGN',
-            'MY_GRIDSQUARE',
-            'MY_CITY',
-            'TX_PWR',
-            'DX'
-        ];
         // Not using <=> for PHP 5.6 compatability
         usort($data, function ($a, $b) {
             if ($a['TIME_ON'] > $b['TIME_ON']) { return 1; }
@@ -694,7 +699,7 @@ class PS {
         });
         foreach ($data as $record) {
             $out = [];
-            foreach ($keys as $key) {
+            foreach (static::ADI_COLUMNS as $key) {
                 $out[$key] = isset($record[$key]) ? $record[$key] : "";
             }
             $ordered[] = $out;
@@ -835,15 +840,12 @@ class PS {
         $adif =     new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
         $data =     $adif->parser();
         $dates =    $this->dataGetDates($data);
-        $last =     end($dates);
-        $logs =     $this->dataCountLogs($data, $last);
+        $date =     end($dates);
+        $logs =     $this->dataCountLogs($data, $date);
         $MGs1 =     $this->dataCountMissingGsq($data);
         $locs =     $this->dataGetLocations($data);
 
-        print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-            . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
-            . "  - Last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . " contained "
-            . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's') . ".\n\n"
+        print static::showStats($data, $date)
             . PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . " to     " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n";
@@ -856,17 +858,7 @@ class PS {
                 . PS::RESET;
             return;
         }
-        print "  - Set " . PS::MAGENTA_BD . "MY_GRIDSQUARE" . PS::GREEN_BD . " to                  " . PS::CYAN_BD . "{$this->inputGSQ}" . PS::GREEN_BD . "\n"
-            . "  - Set " . PS::MAGENTA_BD . "MY_CITY" . PS::GREEN_BD . " to                        " . PS::CYAN_BD . "{$this->parkNameAbbr}" . PS::GREEN_BD . "\n"
-            . ($MGs1 ?
-                "  - Correct " . PS::RED_BD . $MGs1 . PS::GREEN_BD . " missing gridsquares         "
-                . (empty($this->qrzSession) ?
-                    PS::RESPONSE_N . " (no connection to QRZ.com)"
-                    : PS::RESPONSE_Y . " (QRZ.com lookups are available)"
-                ) . "\n"
-                : ""
-            )
-            . ($this->qrzApiKey ? "  - Upload park log to QRZ.com\n" : "")
+        print ($this->qrzApiKey ? "  - Upload park log to QRZ.com\n" : "")
             . "\n"
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
 
@@ -900,7 +892,7 @@ class PS {
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
         $stats = false;
         if ($this->qrzApiKey) {
-            $stats = $this->uploadToQrz($data, $last);
+            $stats = $this->uploadToQrz($data, $date);
         }
 
 
@@ -940,23 +932,15 @@ class PS {
         $result =   $this->fixData($data);
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
-        $last =     end($dates);
-        $logs =     $this->dataCountLogs($data, $last);
+        $date =     end($dates);
+        $logs =     $this->dataCountLogs($data, $date);
         $MGs =      $this->dataCountMissingGsq($data);
         $locs =     $this->dataGetLocations($data);
-        $countries = $this->dataGetCountries($data, $last);
-        $dx =       $this->dataGetBestDx($data, $last);
-        $states =   $this->dataGetStates($data, $last);
 
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD
-            . " exists and contains " . PS::MAGENTA_BD . count($data) . PS::GREEN_BD . " entries.\n"
+            . " exists and contains " . PS::CYAN_BD . count($data) . PS::GREEN_BD . " entries.\n"
             . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
-            . "  - Stats for last session on " . PS::MAGENTA_BD . end($dates) . PS::GREEN_BD . ":\n"
-            . "    There were " . PS::MAGENTA_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's')
-            . " from " . PS::MAGENTA_BD . count($countries) . PS::GREEN_BD . " " . (count($countries) === 1 ? "country" : "countries")
-            . (count($states) ? " and " . PS::MAGENTA_BD . count($states) . PS::GREEN_BD . " state" . (count($countries) === 1 ? "" : "s") : "")
-            . " - best DX was " . PS::MAGENTA_BD . $dx . PS::GREEN_BD . " KM."
-            . "\n"
+            . self::showStats($data, $date)
             . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
@@ -1026,6 +1010,32 @@ class PS {
 
     }
 
+    private static function showStats($data, $date) {
+        $logs =         static::dataCountLogs($data, $date);
+        $countries =    static::dataGetCountries($data, $date);
+        $dx =           static::dataGetBestDx($data, $date);
+        $states =       static::dataGetStates($data, $date);
+
+        return
+          PS::GREEN_BD . "  - Stats for last session on " . PS::CYAN_BD
+        . substr($date, 0, 4) . "-"
+        . substr($date, 4, 2) . "-"
+        . substr($date, 6, 2)
+        . PS::GREEN_BD . ":\n"
+        . "    There were " . PS::CYAN_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's')
+        . " from " . PS::CYAN_BD . count($countries) . PS::GREEN_BD . " " . (count($countries) === 1 ? "country" : "countries")
+        . (count($states) ? " and " . PS::CYAN_BD . count($states) . PS::GREEN_BD . " state" . (count($states) === 1 ? "" : "s") : "")
+        . " - best DX was " . PS::BLUE_BD . $dx . PS::GREEN_BD . " KM.\n"
+        . "      - " . (count($countries) === 1 ? "Country:   " : "Countries: ")
+        . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
+        . (count($states) ? "      - "
+            . (count($states) === 1 ? "State:     ": "States:    ")
+            . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $states) . PS::GREEN_BD . "\n"
+            : ""
+        )
+        . "\n";
+
+    }
     private function syntax($step = false) {
         switch ($step) {
             case 1:
