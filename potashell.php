@@ -711,7 +711,7 @@ class PS {
         print PS::YELLOW_BD . "STATUS:\n";
         if (!$this->modeAudit && (!$this->inputPotaId || !$this->inputGSQ)) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
-                . "    Unable to continue.\n" . PS::RESET;
+                . "    Unable to continue.\n" . PS::RESET . "\n";
             die(0);
         }
         if ($this->modeAudit) {
@@ -719,7 +719,7 @@ class PS {
             return;
         }
         if (!$lookup = $this->getParkName($this->inputPotaId)) {
-            print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputPotaId}.\n" . PS::RESET;
+            print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputPotaId}.\n" . PS::RESET . "\n";
             die(0);
         }
         $this->parkName =       $lookup['name'];
