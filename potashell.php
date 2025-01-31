@@ -577,7 +577,7 @@ class PS {
             . "     " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP" . PS::YELLOW . " - a POTA API lookup is used to obtain the park name.\n"
             . "  3) It obtains missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values from the QRZ Callbook service.\n"
             . "  4) It archives or un-archives the park log file in question - see below for more details.\n"
-//            . "  5) It can post a " . PS::GREEN_BD ."SPOT" . PS::YELLOW ." to POTA with a given frequency, mode and park ID to alert \"hunters\".\n"
+            . "  5) It can post a " . PS::GREEN_BD ."SPOT" . PS::YELLOW ." to POTA with a given frequency, mode and park ID to alert \"hunters\".\n"
             . "\n"
             . PS::YELLOW_BD . "CONFIGURATION:" . PS::YELLOW ."\n"
             . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n"
@@ -596,10 +596,10 @@ class PS {
             . "         so that the user can continue adding logs for this park.\n"
             . "       - The WSJT-X program should be restarted at this point so that it can read or\n"
             . "         create the " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " file.\n"
-//            . "       - The user is then asked if they want to add a " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " for the park on the POTA website.\n"
-//            . "         If they respond " . PS::RESPONSE_Y . ", they will be prompted for:\n" . PS::YELLOW_BD
-//            . "         1. " . PS::YELLOW . "The frequency in KHz - e.g. " . PS::MAGENTA_BD . "14074\n" . PS::YELLOW_BD
-//            . "         2. " . PS::YELLOW . "A comment to add to the spot - usually the intended mode such as " . PS::RED_BD . "FT4" . PS::YELLOW . " or " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
+            . "       - The user is then asked if they want to add a " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " for the park on the POTA website.\n"
+            . "         If they respond " . PS::RESPONSE_Y . ", they will be prompted for:\n" . PS::YELLOW_BD
+            . "         1. " . PS::YELLOW . "The frequency in KHz - e.g. " . PS::MAGENTA_BD . "14074\n" . PS::YELLOW_BD
+            . "         2. " . PS::YELLOW . "A comment to add to the spot - usually the intended mode such as " . PS::RED_BD . "FT4" . PS::YELLOW . " or " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
             . "\n" . PS::YELLOW_BD
             . "     c) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
             . "       - If latest session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n"
@@ -609,10 +609,10 @@ class PS {
             . "         2. " . PS::YELLOW . "Any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n" . PS::YELLOW_BD
             . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all " . PS::GREEN_BD . "MY_GRIDSQUARE" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
             . "         4. " . PS::YELLOW . "The identified park - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP " . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
-//            . "         5. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
-//            . "         6. " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", they will then be prompted for the comment to post for\n"
-//            . "            their spot, usually starting with the code " . PS::GREEN_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
-//            . "            attempt has ended.  They may respond with " . PS::GREEN_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
+            . "         5. " . PS::YELLOW . "The user is asked if they'd like to close their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
+            . "         6. " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", they will then be prompted for the comment to post for\n"
+            . "            their spot, usually starting with the code " . PS::GREEN_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
+            . "            attempt has ended.  They may respond with " . PS::GREEN_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
             . "\n" . PS::YELLOW_BD
             . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
             . "       - If the optional " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
@@ -758,10 +758,8 @@ class PS {
             die(0);
         }
         if (!$fileAdifParkExists && !$fileAdifWsjtxExists) {
-            print PS::RED_BD . "  - Neither " . PS::BLUE_BD . "{$this->fileAdifPark}"
-                . PS::RED_BD . " nor " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::RED_BD . " exist.\n"
-                . "    Unable to proceed without valid data to operate upon." . PS::RESET . "\n";
-            die(0);
+            $this->processParkInitialise();
+            return;
         }
 
         if ($fileAdifParkExists) {
@@ -895,8 +893,6 @@ class PS {
         if ($this->qrzApiKey) {
             $stats = $this->uploadToQrz($data, $date);
         }
-
-
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
             . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
@@ -916,8 +912,23 @@ class PS {
                 . "     * Errors:     " . $stats['ERROR'] . "\n"
               : ""
             )
-            . "\n"
-            . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
+            . "\n";
+
+        print PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
+        . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
+        $fin = fopen("php://stdin","r");
+        $response = strToUpper(trim(fgets($fin)));
+        if ($response === 'Y') {
+            print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
+            $this->spotKhz = trim(fgets($fin));
+
+            print PS::GREEN_BD . "    Enter comment - e.g. QRT - moving to CA-1234            " . PS::RED_BD;
+            $this->spotComment = trim(fgets($fin));
+
+            $this->processParkSpot();
+        }
+
+        print PS::YELLOW_BD . "\nNEXT STEP:\n" . PS::GREEN_BD
             . "  - You should now restart WSJT-X before logging at another park, where\n"
             . "    a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
             . "  - Alternatively, run this script again with a new POTA Park ID to resume\n"
@@ -960,6 +971,26 @@ class PS {
     }
 
     private function processParkSpot() {
+        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzUser);
+        print PS::YELLOW_BD . "\nPENDING OPERATION:\n"
+            . PS::GREEN_BD . "    The following spot will be published at pota.app:\n\n"
+            . PS::WHITE_BD . "    Activator  Spotter    KHz      Park Ref   Comments\n"
+            . "    " . str_repeat('-', 80) . "\n"
+            . "    "
+            . str_pad($activator, 10, ' ') . ' '
+            . str_pad($this->qrzUser, 10, ' ') . ' '
+            . str_pad($this->spotKhz, 8, ' ') . ' '
+            . str_pad($this->inputPotaId, 10, ' ') . ' '
+            . $this->spotComment . "\n"
+            . "    " . str_repeat('-', 80) . "\n\n"
+            . PS::YELLOW_BD . "CONFIRMATION REQUIRED:\n"
+            . PS::GREEN_BD . "    Please confirm that you want to publish the spot: (Y/N) " . PS::BLUE_BD;
+        $fin = fopen("php://stdin","r");
+        $response = strToUpper(trim(fgets($fin)));
+        if ($response !== 'Y') {
+            print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "    Spot has NOT been published.\n" . PS::RESET;
+            return false;
+        }
         $result = $this->publishPotaSpot();
         if ($result === true) {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
@@ -971,6 +1002,27 @@ class PS {
         print PS::RED_BD . "\nERROR:\n  - An error occurred when trying to publish your spot:\n"
             . "    " . PS::BLUE_BD . $result . "\n" . PS::RESET;
         return false;
+    }
+
+    private function processParkInitialise() {
+        print PS::GREEN_BD . "  - This is a first time visit, since neither " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
+            . " nor " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " exist.\n\n"
+            . PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
+            . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
+        $fin = fopen("php://stdin","r");
+        $response = strToUpper(trim(fgets($fin)));
+        if ($response === 'Y') {
+            print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
+            $this->spotKhz = trim(fgets($fin));
+
+            print PS::GREEN_BD . "    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   " . PS::RED_BD;
+            $this->spotComment = trim(fgets($fin));
+
+            $this->processParkSpot();
+        }
+        print "\n" . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
+            . "  - Please restart WSJT-X if you were logging at another park to allow " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
+            . " to be created." . PS::RESET . "\n";
     }
 
     private function processParkUnarchiving() {
@@ -1005,7 +1057,20 @@ class PS {
             );
             print "    Renamed archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
                 . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}" . PS::GREEN_BD . "\n\n"
-                . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
+                . PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
+                . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
+            $fin = fopen("php://stdin","r");
+            $response = strToUpper(trim(fgets($fin)));
+            if ($response === 'Y') {
+                print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
+                $this->spotKhz = trim(fgets($fin));
+
+                print PS::GREEN_BD . "    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   " . PS::RED_BD;
+                $this->spotComment = trim(fgets($fin));
+
+                $this->processParkSpot();
+            }
+            print PS::YELLOW_BD . "\nNEXT STEP:\n" . PS::GREEN_BD
                 . "    You may resume logging at " . PS::RED_BD . "{$this->parkName}\n\n"
                 . PS::RESET;
         } else {
@@ -1016,6 +1081,7 @@ class PS {
 
     private function publishPotaSpot() {
         $url = 'https://api.pota.app/spot/';
+        // $url = 'https://logs.classaxe.com/test.php';
         $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzUser);
         $data = json_encode([
             'activator' =>  $activator,
