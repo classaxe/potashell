@@ -608,7 +608,7 @@ class PS {
             . "         1. " . PS::YELLOW . "The " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file is renamed to " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi\n" . PS::YELLOW_BD
             . "         2. " . PS::YELLOW . "Any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n" . PS::YELLOW_BD
             . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all " . PS::GREEN_BD . "MY_GRIDSQUARE" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
-            . "         4. " . PS::YELLOW . "The correct parkname - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP" . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
+            . "         4. " . PS::YELLOW . "The identified park - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP " . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
 //            . "         5. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
 //            . "         6. " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", they will then be prompted for the comment to post for\n"
 //            . "            their spot, usually starting with the code " . PS::GREEN_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
@@ -616,19 +616,20 @@ class PS {
             . "\n" . PS::YELLOW_BD
             . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
             . "       - If the optional " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
-            . "         the Park Log file, or if that is absent, the wsjtx_log.file currently in use.\n"
+            . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
             . "       - Missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n"
             . "       - No files are renamed.\n"
             . "\n" . PS::YELLOW_BD
-//            . "     e) THE \"SPOT\" MODE:\n" . PS::YELLOW
-//            . "       - If the optional " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, the adds a spot in the pota.app website.\n"
-//            . "       - The next parameter indicates the frequency in KHz.\n"
-//            . "       - The final parameter indicates the intended transmission mode.\n"
-//            . "       - If the final parameter starts with the word \"QRT\", the spot is marked as closed.\n"
-//            . "       - To include an optional message with the Mode or QRT identifier, use quotes around\n"
-//            . "         the last parameter to group words together.\n"
-//            . "       - To test this feature without having users respond, use " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " as the park ID.\n"
-//            . "\n" . PS::YELLOW_BD
+            . "     e) THE \"SPOT\" MODE:\n" . PS::YELLOW
+            . "       - If the optional " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, a 'spot' is posted to the pota.app website.\n"
+            . "       - The next parameter is the frequency in KHz.\n"
+            . "       - The final parameter is the intended transmission mode or \"QRT\" to close the spot.\n"
+            . "       - Use quotes around the last parameter to group words together.\n"
+            . "       - To safely test this feature without users responding, use " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " as the park ID.\n"
+            . "         When the " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " test park is seen, the Activator callsign will be set to ABC123.\n"
+            . "         " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "K-TEST " . PS::CYAN_BD ."AA11BB22 " . PS::GREEN_BD . "SPOT "
+            . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "\"FT8 - Test for POTASHELL spotter mode\"\n" . PS::YELLOW
+            . "\n" . PS::YELLOW_BD
             . $this->syntax(2)
             . "       - The system reviews ALL archived Park Log files, and produces a report on their contents.\n"
             . "\n" . PS::YELLOW_BD
@@ -959,10 +960,17 @@ class PS {
     }
 
     private function processParkSpot() {
-        print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
-            . "  - Your spot at " . PS::BLUE_BD . $this->inputPotaId . PS::GREEN_BD . " on " . PS::RED_BD . $this->spotKhz . "kHz" . PS::GREEN_BD
-            . " has been published at pota.app for " . PS::CYAN_BD . $this->spotComment . PS::GREEN_BD . "\n"
-            . PS::RESET;
+        $result = $this->publishPotaSpot();
+        if ($result === true) {
+            print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
+                . "  - Your spot at " . PS::BLUE_BD . $this->inputPotaId . PS::GREEN_BD . " on " . PS::MAGENTA_BD . $this->spotKhz . " KHz" . PS::GREEN_BD
+                . " has been published on " . PS::YELLOW_BD . "pota.app" . PS::GREEN_BD . " as " . PS::RED_BD . "\"" . $this->spotComment . "\"" . PS::GREEN_BD . "\n"
+                . PS::RESET;
+            return true;
+        }
+        print PS::RED_BD . "\nERROR:\n  - An error occurred when trying to publish your spot:\n"
+            . "    " . PS::BLUE_BD . $result . "\n" . PS::RESET;
+        return false;
     }
 
     private function processParkUnarchiving() {
@@ -1007,7 +1015,26 @@ class PS {
     }
 
     private function publishPotaSpot() {
-
+        $url = 'https://api.pota.app/spot/';
+        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzUser);
+        $data = json_encode([
+            'activator' =>  $activator,
+            'spotter' =>    $this->qrzUser,
+            'frequency' =>  $this->spotKhz,
+            'reference' =>  $this->inputPotaId,
+            'source' =>     'Potashell ' . $this->version . ' - https://github.com/classaxe/potashell',
+            'comments' =>   $this->spotComment
+        ]);
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For HTTPS
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false); // For HTTPS
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [ 'Content-Type:application/json' ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_exec($ch);
+        $error = curl_error($ch);
+        curl_close($ch);
+        return $error ?: true;
     }
 
     private static function showStats($data, $date) {
@@ -1044,7 +1071,7 @@ class PS {
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n"
-//                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "FT8\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "\"FT8 - QRP 4w\"\n"
                     ;
             case 2:
                 return PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n";
