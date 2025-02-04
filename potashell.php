@@ -88,9 +88,10 @@ class PS {
     private $parkNameAbbr;
     private $pathAdifLocal;
     private $qrzApiKey;
+    private $qrzApiCallsign;
     private $qrzPass;
     private $qrzSession;
-    private $qrzUser;
+    private $qrzLogin;
     private $spotKhz;
     private $spotComment;
     private $version;
@@ -160,7 +161,7 @@ class PS {
             return;
         }
         $this->hasInternet = true;
-        if (empty($this->qrzUser) || empty($this->qrzPass)) {
+        if (empty($this->qrzLogin) || empty($this->qrzPass)) {
             print
                 PS::RED_BD . "WARNING:\n"
                 . "  QRZ.com credentials were not found in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  . ".\n"
@@ -171,7 +172,7 @@ class PS {
         }
         $url = sprintf(
             "https://xmldata.qrz.com/xml/current/?username=%s;password=%s;agent=%s",
-            urlencode($this->qrzUser),
+            urlencode($this->qrzLogin),
             urlencode($this->qrzPass),
             urlencode(PS::USERAGENT)
         );
@@ -220,7 +221,7 @@ class PS {
             $status[$key] = $value;
         }
         if ($status['RESULT'] === 'OK') {
-            if (strtoupper($status['CALLSIGN']) !== strtoupper($this->qrzUser)) {
+            if (strtoupper($status['CALLSIGN']) !== strtoupper($this->qrzApiCallsign)) {
                 print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
                     . PS::BLUE_BD . "  - Wrong callsign for [QRZ]apikey\n" . PS::RESET;
                 die(0);
@@ -676,11 +677,12 @@ class PS {
                 . PS::RESET . "\n";
             die(0);
         }
-        if (!empty($this->config['QRZ']['callsign']) && !empty($this->config['QRZ']['password'])) {
-            $this->qrzUser = $this->config['QRZ']['callsign'];
+        if (!empty($this->config['QRZ']['login']) && !empty($this->config['QRZ']['password'])) {
+            $this->qrzLogin = $this->config['QRZ']['login'];
             $this->qrzPass = $this->config['QRZ']['password'];
         }
-        if (!empty($this->config['QRZ']['apikey'])) {
+        if (!empty($this->config['QRZ']['apicallsign']) && !empty($this->config['QRZ']['apikey'])) {
+            $this->qrzApiCallsign = $this->config['QRZ']['apicallsign'];
             $this->qrzApiKey = $this->config['QRZ']['apikey'];
         }
     }
@@ -890,7 +892,7 @@ class PS {
         $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
         $stats = false;
-        if ($this->qrzApiKey) {
+        if ($this->qrzApiCallsign && $this->qrzApiKey) {
             $stats = $this->uploadToQrz($data, $date);
         }
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
@@ -971,14 +973,14 @@ class PS {
     }
 
     private function processParkSpot() {
-        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzUser);
+        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
         print PS::YELLOW_BD . "\nPENDING OPERATION:\n"
             . PS::GREEN_BD . "    The following spot will be published at pota.app:\n\n"
             . PS::WHITE_BD . "    Activator  Spotter    KHz      Park Ref   Comments\n"
             . "    " . str_repeat('-', 80) . "\n"
             . "    "
             . str_pad($activator, 10, ' ') . ' '
-            . str_pad($this->qrzUser, 10, ' ') . ' '
+            . str_pad($this->qrzLogin, 10, ' ') . ' '
             . str_pad($this->spotKhz, 8, ' ') . ' '
             . str_pad($this->inputPotaId, 10, ' ') . ' '
             . $this->spotComment . "\n"
@@ -1082,10 +1084,10 @@ class PS {
     private function publishPotaSpot() {
         $url = 'https://api.pota.app/spot/';
         // $url = 'https://logs.classaxe.com/test.php';
-        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzUser);
+        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
         $data = json_encode([
             'activator' =>  $activator,
-            'spotter' =>    $this->qrzUser,
+            'spotter' =>    $this->qrzLogin,
             'frequency' =>  $this->spotKhz,
             'reference' =>  $this->inputPotaId,
             'source' =>     'Potashell ' . $this->version . ' - https://github.com/classaxe/potashell',

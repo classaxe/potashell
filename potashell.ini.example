@@ -22,12 +22,12 @@
 log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
 
 [QRZ]
-; QRZ.com XML Data subscribers can put their callsign and password below
-; for automatic lookups for any missing gridsquares seen in POTA Logfiles
-;
-; Providing your API Key allows your log to be uploaded automatically to
-; QRZ.com at the end of your session.
-;
-callsign = "A12BCD"
+; QRZ.com XML Data subscribers can put their login and password below
+; for automatic lookups for any missing gridsquares seen in POTA Logfiles:
+login = "A12BCD"
 password = "S3cret"
+
+; QRZ.com XML Data subscribers may have several logbooks, each with a callsign and API key.
+; Provide your QRZ Logbook operating callsign and API Key for automatic uploads
+apicallsign = "A12BCD"
 apikey = "ABCD-1234-ABCD-1234"
