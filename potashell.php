@@ -15,6 +15,7 @@ class PS {
         'CALL',
         'MODE',
         'SUBMODE',
+        'MODECOMP',
         'BAND',
         'FREQ',
         'STATE',
@@ -25,8 +26,9 @@ class PS {
         'QSO_DATE_OFF',
         'TIME_OFF',
         'STATION_CALLSIGN',
-        'MY_GRIDSQUARE',
+        'PARK',
         'MY_CITY',
+        'MY_GRIDSQUARE',
         'TX_PWR',
         'COMMENT',
         'DX'
@@ -373,6 +375,17 @@ class PS {
         return $dates;
     }
 
+    private static function dataGetLogs($data, $date = null) {
+        $logs = [];
+        foreach ($data as $d) {
+            if (!$date || $d['QSO_DATE'] == $date) {
+                $logs[] = $d;
+            }
+        }
+        return $logs;
+    }
+
+
     private static function dataGetMyGrid($data) {
         $gsqs = [];
         foreach ($data as $d) {
@@ -422,8 +435,15 @@ class PS {
                     }
                     break;
             }
-            $record['MY_GRIDSQUARE'] = $this->inputGSQ;
-            $record['MY_CITY'] = $this->parkNameAbbr;
+            switch ($record['COUNTRY']) {
+                case 'United States':
+                    $record['COUNTRY'] = 'USA';
+                    break;
+            }
+            $record['MY_GRIDSQUARE'] =  $this->inputGSQ;
+            $record['MY_CITY'] =        $this->parkNameAbbr;
+            $record['PARK'] =           $this->inputPotaId;
+            $record['MODECOMP'] = ($record['MODE'] === 'MFSK' && $record['SUBMODE'] === 'FT4' ? 'FT4' : $record['MODE']);
             $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
             $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
             if ($myLatLon && $theirLatLon) {
@@ -847,6 +867,7 @@ class PS {
         $locs =     $this->dataGetLocations($data);
 
         print static::showStats($data, $date)
+            . static::showLogs($data, $date)
             . PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . " to     " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n";
@@ -954,7 +975,8 @@ class PS {
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD
             . " exists and contains " . PS::CYAN_BD . count($data) . PS::GREEN_BD . " entries.\n"
             . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
-            . self::showStats($data, $date)
+            . static::showStats($data, $date)
+            . static::showLogs($data, $date)
             . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
@@ -1084,10 +1106,10 @@ class PS {
     private function publishPotaSpot() {
         $url = 'https://api.pota.app/spot/';
         // $url = 'https://logs.classaxe.com/test.php';
-        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
+        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzApiCallsign);
         $data = json_encode([
             'activator' =>  $activator,
-            'spotter' =>    $this->qrzLogin,
+            'spotter' =>    $this->qrzApiCallsign,
             'frequency' =>  $this->spotKhz,
             'reference' =>  $this->inputPotaId,
             'source' =>     'Potashell ' . $this->version . ' - https://github.com/classaxe/potashell',
@@ -1103,6 +1125,54 @@ class PS {
         $error = curl_error($ch);
         curl_close($ch);
         return $error ?: true;
+    }
+
+    private static function showLogs($data, $date) {
+        $logs =         static::dataGetLogs($data, $date);
+        $columns =      [
+            ['label' => 'DATE',    'src' => 'QSO_DATE',      'len' => 4],
+            ['label' => 'PARK',    'src' => 'PARK',          'len' => 4],
+            ['label' => 'GSQ',     'src' => 'MY_GRIDSQUARE', 'len' => 3],
+            ['label' => 'UTC',     'src' => 'TIME_ON',       'len' => 3],
+            ['label' => 'CALL',    'src' => 'CALL',          'len' => 4],
+            ['label' => 'BAND',    'src' => 'BAND',          'len' => 4],
+            ['label' => 'MODE',    'src' => 'MODECOMP',      'len' => 4],
+            ['label' => 'STATE',   'src' => 'STATE',         'len' => 5],
+            ['label' => 'COUNTRY', 'src' => 'COUNTRY',       'len' => 7],
+            ['label' => 'GSQ',     'src' => 'GRIDSQUARE',    'len' => 3],
+            ['label' => 'KM',      'src' => 'DX',            'len' => 2],
+        ];
+        foreach ($logs as $log) {
+            foreach ($columns as &$column) {
+                if (strlen($log[$column['src']]) > $column['len']) {
+                    $column['len'] = strlen($log[$column['src']]);
+                }
+            }
+        }
+        $header = [];
+        $header_bd = [];
+        foreach ($columns as &$column) {
+            $header[] = str_pad($column['label'], $column['len']);
+            $header_bd[] = PS::CYAN_BD . str_pad($column['label'], $column['len']) . PS::GREEN;
+        }
+        $head =     '| ' . implode(' | ', $header) . ' |';
+        $head_bd =  '| ' . implode(' | ', $header_bd) . ' |';
+        $rows = [];
+        foreach ($logs as $log) {
+            $row = [];
+            foreach ($columns as &$column) {
+                $row[] = PS::CYAN . str_pad($log[$column['src']], $column['len']) . PS::GREEN;
+            }
+            $rows[] = '| ' . implode(' | ', $row) . ' |';
+        }
+        return
+            PS::YELLOW_BD . "LOGS:\n" . PS::GREEN
+            . str_repeat('-', strlen($head)) . "\n"
+            . $head_bd . "\n"
+            . str_repeat('-', strlen($head)) . "\n"
+            . implode("\n", $rows) . "\n"
+            . str_repeat('-', strlen($head)) . "\n"
+            . "\n";
     }
 
     private static function showStats($data, $date) {
@@ -1129,8 +1199,8 @@ class PS {
             : ""
         )
         . "\n";
-
     }
+
     private function syntax($step = false) {
         switch ($step) {
             case 1:
