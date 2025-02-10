@@ -306,11 +306,21 @@ class PS {
         $countries = [];
         foreach ($data as $d) {
             if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['COUNTRY'])) {
-                $countries[$d['COUNTRY']] = true;
+                if (!isset($countries[$d['COUNTRY']])) {
+                    $countries[$d['COUNTRY']] = 0;
+                }
+                $countries[$d['COUNTRY']] ++;
             }
         }
         ksort($countries);
-        return array_keys($countries);
+        $countriesWithCounts = [];
+        foreach ($countries as $country => $count) {
+            if ($count > 1) {
+                $country .= PS::CYAN_BD . " (" . $count . ")";
+            }
+            $countriesWithCounts[$country] = $count;
+        }
+        return array_keys($countriesWithCounts);
     }
 
     private static function dataGetBestDx($data, $date = null) {
@@ -338,11 +348,21 @@ class PS {
         $states = [];
         foreach ($data as $d) {
             if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['STATE'])) {
-                $states[$d['STATE']] = true;
+                if (!isset($states[$d['STATE']])) {
+                    $states[$d['STATE']] = 0;
+                }
+                $states[$d['STATE']] ++;
             }
         }
         ksort($states);
-        return array_keys($states);
+        $statesWithCounts = [];
+        foreach ($states as $state => $count) {
+            if ($count > 1) {
+                $state .= PS::CYAN_BD . " (" . $count . ")";
+            }
+            $statesWithCounts[$state] = $count;
+        }
+        return array_keys($statesWithCounts);
     }
 
     private static function dataCountLogs($data, $date = null) {
