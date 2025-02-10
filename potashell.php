@@ -860,6 +860,8 @@ class PS {
     private function processParkArchiving() {
         $adif =     new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
         $data =     $adif->parser();
+        $result =   $this->fixData($data);
+        $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
         $date =     end($dates);
         $logs =     $this->dataCountLogs($data, $date);
@@ -1144,7 +1146,7 @@ class PS {
         ];
         foreach ($logs as $log) {
             foreach ($columns as &$column) {
-                if (strlen($log[$column['src']]) > $column['len']) {
+                if (isset($log[$column['src']]) && strlen($log[$column['src']]) > $column['len']) {
                     $column['len'] = strlen($log[$column['src']]);
                 }
             }
@@ -1161,7 +1163,7 @@ class PS {
         foreach ($logs as $log) {
             $row = [];
             foreach ($columns as &$column) {
-                $row[] = PS::CYAN . str_pad($log[$column['src']], $column['len']) . PS::GREEN;
+                $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len']) . PS::GREEN;
             }
             $rows[] = '| ' . implode(' | ', $row) . ' |';
         }
