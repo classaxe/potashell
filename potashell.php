@@ -892,7 +892,7 @@ class PS {
             . static::showLogs($data, $date)
             . PS::YELLOW_BD . "OPERATION:\n"
             . PS::GREEN_BD . "  - Archive log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
-            . " to     " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n";
+            . " to " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . "\n";
 
         if (count($locs) > 1) {
             print PS::RED_BD . "\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
@@ -902,7 +902,7 @@ class PS {
                 . PS::RESET;
             return;
         }
-        print ($this->qrzApiKey ? "  - Upload park log to QRZ.com\n" : "")
+        print ($this->qrzApiKey ? "  - Upload park log to " . PS::BLUE_BD . "QRZ.com" . PS::GREEN_BD . "\n" : "")
             . "\n"
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
 
@@ -941,8 +941,8 @@ class PS {
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
             . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
-            . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::RED_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n"
-            . (!empty($this->qrzSession) && $status['GRIDSQUARE']['missing'] ? "  - Obtained " . PS::RED_BD
+            . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::CYAN_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n"
+            . (!empty($this->qrzSession) && $status['GRIDSQUARE']['missing'] ? "  - Obtained " . PS::CYAN_BD
                 . ($status['GRIDSQUARE']['fixed'] ?
                     ($status['GRIDSQUARE']['missing'] - $status['GRIDSQUARE']['fixed']) . " of " . $status['GRIDSQUARE']['missing']
                 :
@@ -951,10 +951,11 @@ class PS {
                 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
             . ($stats ?
-                  "  - Uploaded " . $logs . " Logs to QRZ.com:\n"
-                . "     * Inserted:   ". $stats['INSERTED'] . "\n"
-                . "     * Duplicates: " . $stats['DUPLICATE'] . "\n"
-                . "     * Errors:     " . $stats['ERROR'] . "\n"
+                  "  - Uploaded " . $logs . " Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . ":\n"
+                . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
+                . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
+                . ($stats['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $stats['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
+                . ($stats['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $stats['ERROR'] . "\n" . PS::GREEN_BD : "")
               : ""
             )
             . "\n";
@@ -1152,17 +1153,18 @@ class PS {
     private static function showLogs($data, $date) {
         $logs =         static::dataGetLogs($data, $date);
         $columns =      [
-            ['label' => 'DATE',    'src' => 'QSO_DATE',      'len' => 4],
-            ['label' => 'PARK',    'src' => 'PARK',          'len' => 4],
-            ['label' => 'GSQ',     'src' => 'MY_GRIDSQUARE', 'len' => 3],
-            ['label' => 'UTC',     'src' => 'TIME_ON',       'len' => 3],
-            ['label' => 'CALL',    'src' => 'CALL',          'len' => 4],
-            ['label' => 'BAND',    'src' => 'BAND',          'len' => 4],
-            ['label' => 'MODE',    'src' => 'MODECOMP',      'len' => 4],
-            ['label' => 'STATE',   'src' => 'STATE',         'len' => 5],
-            ['label' => 'COUNTRY', 'src' => 'COUNTRY',       'len' => 7],
-            ['label' => 'GSQ',     'src' => 'GRIDSQUARE',    'len' => 3],
-            ['label' => 'KM',      'src' => 'DX',            'len' => 2],
+            ['label' => 'DATE',     'src' => 'QSO_DATE',         'len' => 4],
+            ['label' => 'UTC',      'src' => 'TIME_ON',          'len' => 3],
+            ['label' => 'YOU',      'src' => 'STATION_CALLSIGN', 'len' => 3],
+            ['label' => 'PARK',     'src' => 'PARK',             'len' => 4],
+            ['label' => 'GSQ',      'src' => 'MY_GRIDSQUARE',    'len' => 3],
+            ['label' => 'CALLSIGN', 'src' => 'CALL',             'len' => 8],
+            ['label' => 'BAND',     'src' => 'BAND',             'len' => 4],
+            ['label' => 'MODE',     'src' => 'MODECOMP',         'len' => 4],
+            ['label' => 'STATE',    'src' => 'STATE',            'len' => 5],
+            ['label' => 'COUNTRY',  'src' => 'COUNTRY',          'len' => 7],
+            ['label' => 'GSQ',      'src' => 'GRIDSQUARE',       'len' => 3],
+            ['label' => 'KM',       'src' => 'DX',               'len' => 2],
         ];
         foreach ($logs as $log) {
             foreach ($columns as &$column) {
@@ -1257,9 +1259,10 @@ class PS {
             $adifRecords[] = adif::toAdif([$record], $this->version, true, false);
         }
         $stats = [
-            'ERROR' => 0,
-            'INSERTED' => 0,
-            'DUPLICATE' => 0
+            'DUPLICATE' =>  0,
+            'ERROR' =>      0,
+            'INSERTED' =>   0,
+            'WRONG_CALL' => 0
         ];
         foreach ($adifRecords as $adifRecord) {
             try {
@@ -1286,7 +1289,10 @@ class PS {
                 case 'FAIL':
                     if ($status['REASON'] === 'Unable to add QSO to database: duplicate') {
                         $stats['DUPLICATE']++;
+                    } elseif (strpos($status['REASON'], 'wrong station_callsign for this logbook') !== false) {
+                        $stats['WRONG_CALL']++;
                     } else {
+                        print $status['REASON'] . "\n";
                         $stats['ERROR']++;
                     }
                     break;
