@@ -1153,6 +1153,7 @@ class PS {
     private static function showLogs($data, $date) {
         $logs =         static::dataGetLogs($data, $date);
         $columns =      [
+            ['label' => '#',        'src' => '',                 'len' => 1],
             ['label' => 'DATE',     'src' => 'QSO_DATE',         'len' => 4],
             ['label' => 'UTC',      'src' => 'TIME_ON',          'len' => 3],
             ['label' => 'YOU',      'src' => 'STATION_CALLSIGN', 'len' => 3],
@@ -1173,6 +1174,7 @@ class PS {
                 }
             }
         }
+        $columns[0]['len'] = strlen('' . (1 + count($logs)));
         $header = [];
         $header_bd = [];
         foreach ($columns as &$column) {
@@ -1182,9 +1184,12 @@ class PS {
         $head =     '| ' . implode(' | ', $header) . ' |';
         $head_bd =  '| ' . implode(' | ', $header_bd) . ' |';
         $rows = [];
-        foreach ($logs as $log) {
-            $row = [];
+        foreach ($logs as $i => $log) {
+            $row = [str_pad('' . (1 + $i), $columns[0]['len'], ' ', STR_PAD_LEFT)];
             foreach ($columns as &$column) {
+                if ($column['src'] === '') {
+                    continue;
+                }
                 $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len']) . PS::GREEN;
             }
             $rows[] = '| ' . implode(' | ', $row) . ' |';
