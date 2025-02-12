@@ -1175,9 +1175,13 @@ class PS {
             }
         }
         $columns[0]['len'] = strlen('' . (1 + count($logs)));
-        $header = [];
-        $header_bd = [];
+        $num = str_pad('#', $columns[0]['len'], ' ', STR_PAD_LEFT);
+        $header = [$num];
+        $header_bd = [$num];
         foreach ($columns as &$column) {
+            if ($column['src'] === '') {
+                continue;
+            }
             $header[] = str_pad($column['label'], $column['len']);
             $header_bd[] = PS::CYAN_BD . str_pad($column['label'], $column['len']) . PS::GREEN;
         }
