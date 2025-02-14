@@ -141,13 +141,20 @@ class PS {
     }
 
     private function checkPhp() {
-        if (!extension_loaded('mbstring')) {
-            print PS::RED_BD . "ERROR:\n  PHP mbstring extension is not available.\n  (PHP " . phpversion() . ")\n" . PS::RESET;
-            die(0);
-        }
-        if (!extension_loaded('openssl')) {
-            print PS::RED_BD . "ERROR:\n  PHP OpenSSL extension is not available.\n  (PHP " . phpversion() . ")\n" . PS::RESET;
-            die(0);
+        $libs = [
+            'curl',
+            'mbstring',
+            'openssl'
+        ];
+        $msg = "\n" . PS::RED_BD . "ERROR:\n" . PS::GREEN_BD . "  PHP " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . " extension is not available.\n"
+            . PS::GREEN_BD ."  PHP version " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . ", "
+            . "php.ini file: " . PS::YELLOW_BD . "%s\n"
+            . PS::RESET;
+        foreach ($libs as $lib) {
+            if (!extension_loaded($lib)) {
+                print sprintf($msg, $lib, phpversion(),(php_ini_loaded_file() ? php_ini_loaded_file() : "None"));
+                die(0);
+            }
         }
     }
 
@@ -1131,20 +1138,17 @@ class PS {
             . $this->showSyntax(1)
             . "\n" . PS::YELLOW_BD
             . "     a) PROMPTING FOR USER INPUTS:\n" . PS::YELLOW
-            . "       - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, system will prompt for inputs.\n"
-            . "       - Before any files are renamed or modified, the user is asked to confirm the operation.\n"
-            . "       - If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n"
+            . "       - If either " . PS::BLUE_BD . "Park ID" . PS::YELLOW . " or " . PS::CYAN_BD ."GSQ" . PS::YELLOW . " is omitted, potashell prompts for these values.\n"
+            . "       - Before any files are renamed or modified, user must confirm the operation.\n"
+            . "         If user responds " . PS::RESPONSE_Y . " operation continues, " . PS::RESPONSE_N ." aborts.\n"
             . "\n" . PS::YELLOW_BD
             . "     b) WITHOUT AN ACTIVE LOG FILE:\n" . PS::YELLOW
-            . "       - If there is NO active " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " log file, the system looks for a file\n"
-            . "         named " . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW . ", and if found, it renames it to " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . "\n"
-            . "         so that the user can continue adding logs for this park.\n"
-            . "       - The WSJT-X program should be restarted at this point so that it can read or\n"
-            . "         create the " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " file.\n"
+            . "       - If there is NO active " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " log file, potashell looks for a file for the\n"
+            . "         indicated park, e.g." . PS::BLUE_BD ."wsjtx_log_CA-1368.adi" . PS::YELLOW . ", and if the user confirms the operation,\n"
+            . "         potashell renames it to " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " so that logs can be added for this park.\n"
+            . "       - " . PS::YELLOW_BD . "WSJT-X" . PS::YELLOW . " should be restarted if running, so the " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " file can be read or created.\n"
             . "       - The user is then asked if they want to add a " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " for the park on the POTA website.\n"
-            . "         If they respond " . PS::RESPONSE_Y . ", they will be prompted for:\n" . PS::YELLOW_BD
-            . "         1. " . PS::YELLOW . "The frequency in KHz - e.g. " . PS::MAGENTA_BD . "14074\n" . PS::YELLOW_BD
-            . "         2. " . PS::YELLOW . "A comment to add to the spot - usually the intended mode such as " . PS::RED_BD . "FT4" . PS::YELLOW . " or " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
+            . "         If user responds " . PS::RESPONSE_Y . ", potashell asks for " . PS::MAGENTA_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . " - usually mode, e.g. " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
             . "\n" . PS::YELLOW_BD
             . "     c) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
             . "       - If latest session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n"
@@ -1155,24 +1159,24 @@ class PS {
             . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all " . PS::GREEN_BD . "MY_GRIDSQUARE" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
             . "         4. " . PS::YELLOW . "The identified park - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP " . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
             . "         5. " . PS::YELLOW . "The user is asked if they'd like to close their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
-            . "         6. " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", they will then be prompted for the comment to post for\n"
-            . "            their spot, usually starting with the code " . PS::GREEN_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
-            . "            attempt has ended.  They may respond with " . PS::GREEN_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
+            . "            " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", potashell prompts for the " . PS::MAGENTA_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . ", usually\n"
+            . "            starting with the code " . PS::RED_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
+            . "            attempt has ended - " . PS::RED_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
             . "\n" . PS::YELLOW_BD
             . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
-            . "       - If the optional " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
+            . "       - If the " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
             . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
             . "       - Missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n"
             . "       - No files are renamed.\n"
             . "\n" . PS::YELLOW_BD
             . "     d) THE \"PUSH\" MODE:\n" . PS::YELLOW
-            . "       - If the optional " . PS::GREEN_BD . "PUSH" . PS::YELLOW . " argument is given, system operates directly on either\n"
+            . "       - If the " . PS::GREEN_BD . "PUSH" . PS::YELLOW . " argument is given, system operates directly on either\n"
             . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
-            . "       - The logs from the latest session are uploaded to QRZ.com and you won't be prompted to add a spot to pota.app..\n"
-            . "       - No files are renamed.\n"
+            . "       - The logs achieved so far in the latest session are uploaded to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW. ".\n"
+            . "       - No files are renamed and you won't be prompted to add a spot to " . PS::YELLOW_BD . "pota.app" . PS::YELLOW. ".\n"
             . "\n" . PS::YELLOW_BD
             . "     e) THE \"SPOT\" MODE:\n" . PS::YELLOW
-            . "       - If the optional " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, a 'spot' is posted to the pota.app website.\n"
+            . "       - If the " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, a 'spot' is posted to the pota.app website.\n"
             . "       - The next parameter is the frequency in KHz.\n"
             . "       - The final parameter is the intended transmission mode or \"QRT\" to close the spot.\n"
             . "       - Use quotes around the last parameter to group words together.\n"
