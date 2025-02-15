@@ -260,7 +260,7 @@ class PS {
             .'[a-rA-R]{2}[0-9]{2}[a-xA-X]{2}[0-9]{2}|'                  // FN03HR72
             .'[a-rA-R]{2}[0-9]{2}[a-xA-X]{2}[0-9]{2}[a-xA-X]{2})$/i';   // FN03HR72VO
 
-        if (!preg_match($regExp, $GSQ)) {
+        if (!$GSQ || !preg_match($regExp, $GSQ)) {
             return false;
         }
         $_GSQ =      strToUpper($GSQ);
@@ -541,7 +541,7 @@ class PS {
     private function getGSQForCall($callsign) {
         $data = $this->getInfoForCall($callsign);
         if (empty($data->Callsign->grid)) {
-            print PS::RED_BD . "    WARNING: - No gridsquare found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
+            print PS::RED_BD . "    WARNING: No gridsquare found at QRZ.com for callsign " . PS::BLUE_BD . $callsign . "\n" . PS::RESET;
             return null;
         }
         return (string) $data->Callsign->grid;
@@ -550,7 +550,7 @@ class PS {
     private function getItuForCall($callsign) {
         $data = $this->getInfoForCall($callsign);
         if (empty($data->Callsign->country)) {
-            print PS::RED_BD . "    WARNING: - No country found at QRZ.com for user " . PS::BLUE_BD . $callsign . PS::RED_BD  .".\n" . PS::RESET;
+            print PS::RED_BD . "    WARNING: No country found at QRZ.com for callsign " . PS::BLUE_BD . $callsign . "\n" . PS::RESET;
             return null;
         }
         return (string) $data->Callsign->country;
@@ -757,7 +757,7 @@ class PS {
     }
 
     private function processAudit() {
-        $lineLen = 100;
+        $lineLen = 120;
         print PS::GREEN_BD . "Performing Audit on all POTA Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
@@ -766,22 +766,20 @@ class PS {
             return;
         }
         print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
-            . "  #LS = Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
             . "  #LT = Logs in total - excluding duplicates\n"
-            . "  #MG = Missing Grid Squares\n"
+            . "  #ST = Sessions in Total\n"
             . "  #SA = Successful Activations\n"
             . "  #FA = Failed Activations\n"
-            . "  #ST = Sessions in Total\n"
+            . "  #MG = Missing Grid Squares\n"
+            . "  #LS = Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', $lineLen) . "\n"
-            . "POTA ID  | MY_GRID    | #LS | #LT | #MG | #SA | #FA | #ST | Park Name in Log File\n"
+            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | DX KM | Park Name in Log File\n"
             . str_repeat('-', $lineLen) . "\n";
         $i = 0;
         foreach ($files as $file) {
             if (is_file($file)) {
-                if ($i++ > 4) {
-                    //continue;
-                }
+                // if ($i++ > 4) { continue; }  // For development testing
                 $fn =       basename($file);
                 $parkId =   explode('.', explode('_', $fn)[2])[0];
                 $lookup =   $this->getParkName($parkId);
@@ -801,18 +799,22 @@ class PS {
                 $ST =       count($dates);
                 $AT =       PS::dataCountActivations($data);
                 $FT =       $ST - $AT;
+                $DX =       PS::dataGetBestDx($data);
                 print
                     PS::BLUE_BD . str_pad($parkId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
                         PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
                         PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
                       ) . PS::GREEN_BD . " | "
-                    . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
+
                     . str_pad($LT, 3, ' ', STR_PAD_LEFT) . " | "
-                    . PS::YELLOW_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
+                    . str_pad($ST, 3, ' ', STR_PAD_LEFT) . " | "
                     . str_pad($AT, 3, ' ', STR_PAD_LEFT) . " | "
                     . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
-                    . str_pad($ST, 3, ' ', STR_PAD_LEFT) . " | "
+                    . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
+
+                    . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
+                    . str_pad($DX, 5, ' ', STR_PAD_LEFT) . " | "
                     . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . "Lookup failed" . PS::GREEN_BD) . "\n";
             }
         }
@@ -1200,7 +1202,7 @@ class PS {
     private static function showLogs($data, $date) {
         $logs =         static::dataGetLogs($data, $date);
         $columns =      [
-            ['label' => '#',        'src' => '',                 'len' => 1],
+            ['label' => '#',        'src' => '',                 'len' => 3],
             ['label' => 'DATE',     'src' => 'QSO_DATE',         'len' => 4],
             ['label' => 'UTC',      'src' => 'TIME_ON',          'len' => 3],
             ['label' => 'YOU',      'src' => 'STATION_CALLSIGN', 'len' => 3],
@@ -1222,7 +1224,7 @@ class PS {
             }
         }
         $columns[0]['len'] = strlen('' . (1 + count($logs)));
-        $num = str_pad('#', $columns[0]['len'], ' ', STR_PAD_LEFT);
+        $num = str_pad(' #', $columns[0]['len'], ' ', STR_PAD_LEFT);
         $header = [$num];
         $header_bd = [$num];
         foreach ($columns as &$column) {
@@ -1232,8 +1234,8 @@ class PS {
             $header[] = str_pad($column['label'], $column['len']);
             $header_bd[] = PS::CYAN_BD . str_pad($column['label'], $column['len']) . PS::GREEN;
         }
-        $head =     '| ' . implode(' | ', $header) . ' |';
-        $head_bd =  '| ' . implode(' | ', $header_bd) . ' |';
+        $head =     implode(' | ', $header);
+        $head_bd =  implode(' | ', $header_bd);
         $rows = [];
         foreach ($logs as $i => $log) {
             $row = [str_pad('' . (1 + $i), $columns[0]['len'], ' ', STR_PAD_LEFT)];
@@ -1243,7 +1245,7 @@ class PS {
                 }
                 $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len']) . PS::GREEN;
             }
-            $rows[] = '| ' . implode(' | ', $row) . ' |';
+            $rows[] = implode(' | ', $row);
         }
         return
             PS::YELLOW_BD . "LOGS:\n" . PS::GREEN
