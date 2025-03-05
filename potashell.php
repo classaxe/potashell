@@ -75,9 +75,15 @@ class PS {
     ];
 
     private $config;
+    private $clublogApikey;
+    private $clublogCallsign;
+    private $clublogEmail;
+    private $clublogPassword;
+
     private $fileAdifPark;
     private $fileAdifWsjtx;
-    private $hasInternet;
+    private $hasClublog = false;
+    private $hasInternet = false;
     private $inputGSQ;
     private $inputPotaId;
     private $modeAudit;
@@ -100,13 +106,15 @@ class PS {
     private $version;
 
     public function __construct() {
-        $this->getCliArgs();
+        $this->argsGetCli();
         $this->version = exec('git describe --tags');
         $this->getHTTPContext();
-        $this->checkPhp();
-        $this->loadIni();
-        $this->header();
-        $this->checkQrz();
+        $this->phpCheck();
+        $this->argsLoadIni();
+        $this->showHeader();
+        $this->internetCheck();
+        $this->qrzCheck();
+        $this->clublogCheck();
         if ($this->modeSyntax) {
             print $this->showSyntax();
             return;
@@ -117,9 +125,121 @@ class PS {
         }
         if (!$this->modeAudit && $this->inputGSQ === null) {
             print $this->showSyntax();
-            $this->getUserArgs();
+            $this->argsGetInput();
         }
         $this->process();
+    }
+
+    private function argsGetCli() {
+        global $argv;
+        $arg1 = isset($argv[1]) ? $argv[1] : null;
+        $arg2 = isset($argv[2]) ? $argv[2] : null;
+        $arg3 = isset($argv[3]) ? $argv[3] : null;
+        $arg4 = isset($argv[4]) ? $argv[4] : null;
+        $arg5 = isset($argv[5]) ? $argv[5] : null;
+        $this->modeAudit = false;
+        $this->modeCheck = false;
+        $this->modeHelp = false;
+        $this->modePush =
+        $this->modeSpot = false;
+        $this->modeSyntax = false;
+        if ($arg1 && strtoupper($arg1) === 'AUDIT') {
+            $this->modeAudit = true;
+            return;
+        }
+        if ($arg1 && strtoupper($arg1) === 'HELP') {
+            $this->modeHelp = true;
+            return;
+        }
+        if ($arg1 && strtoupper($arg1) === 'SYNTAX') {
+            $this->modeSyntax = true;
+            return;
+        }
+        $this->inputPotaId = $arg1;
+        $this->inputGSQ = $arg2;
+        $this->modeCheck = $arg3 && strtoupper($arg3) === 'CHECK';
+        $this->modePush = $arg3 && strtoupper($arg3) === 'PUSH';
+        $this->modeSpot = $arg3 && strtoupper($arg3) === 'SPOT';
+        if ($this->modeSpot) {
+            $this->spotKhz = $arg4;
+            $this->spotComment = $arg5;
+        }
+    }
+
+    private function argsGetInput() {
+        print "\n" . PS::YELLOW_BD . "ARGUMENTS:\n";
+        if ($this->inputPotaId === null) {
+            print PS::GREEN_BD . "  - Please provide POTA Park ID:  " . PS::BLUE_BD;
+            $fin = fopen("php://stdin","r");
+            $this->inputPotaId = trim(fgets($fin));
+        } else {
+            print PS::GREEN_BD . "  - Supplied POTA Park ID:        " . PS::BLUE_BD . $this->inputPotaId . "\n";
+        }
+        if ($this->inputGSQ === null) {
+            print PS::GREEN_BD . "  - Please provide 8/10-char GSQ: " . PS::CYAN_BD;
+            $fin = fopen("php://stdin","r");
+            $this->inputGSQ = trim(fgets($fin));
+        } else {
+            print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->inputGSQ . "\n";
+        }
+        $this->parkName = "POTA: " . $this->inputPotaId;
+        print "\n";
+    }
+
+    private function argsLoadIni() {
+        $filename = 'potashell.ini';
+        $example =  'potashell.ini.example';
+        if (!file_exists(__DIR__ . DIRECTORY_SEPARATOR . $filename)) {
+            $this->showHeader();
+            print
+                PS::RED_BD . "ERROR:\n"
+                . "  The " . PS::BLUE_BD . $filename . PS::RED_BD ." Configuration file was missing.\n";
+
+            $contents = file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $example);
+            $contents = str_replace("; This is a sample configuration file for potashell\r\n", '', $contents);
+            $contents = str_replace("; Copy this file to potashell.ini, and modify it to suit your own needs\r\n", '', $contents);
+            if (file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . $filename, $contents)) {
+                print
+                    PS::RED_BD . "  It has now been created.\n"
+                    . "  Please edit the new " . PS::BLUE_BD . $filename . PS::RED_BD ." file, and supply your own values.\n";
+            }
+            print PS::RESET . "\n";
+            die(0);
+        };
+        if (!$this->config = @parse_ini_file($filename, true)) {
+            print PS::RED_BD . "ERROR:\n  Unable to parse {$filename} file.\n" . PS::RESET . "\n";
+            die(0);
+        };
+        $this->pathAdifLocal = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
+        if (!file_exists($this->pathAdifLocal)) {
+            $this->showHeader();
+            print
+                PS::RED_BD . "ERROR:\n"
+                . "  The specified " . PS::CYAN_BD . "[WSJTX] log_directory" . PS::RED_BD . " specified in " . PS::BLUE_BD . $filename . PS::RED_BD ." doesn't exist.\n"
+                . "  Please edit " . PS::BLUE_BD . $filename . PS::RED_BD ." and set the correct path to your WSJT-X log files.\n"
+                . PS::RESET . "\n";
+            die(0);
+        }
+
+        // QRZ Details
+        if (!empty($this->config['QRZ']['login']) && !empty($this->config['QRZ']['password'])) {
+            $this->qrzLogin = $this->config['QRZ']['login'];
+            $this->qrzPass = $this->config['QRZ']['password'];
+        }
+        if (!empty($this->config['QRZ']['apicallsign']) && !empty($this->config['QRZ']['apikey'])) {
+            $this->qrzApiCallsign = $this->config['QRZ']['apicallsign'];
+            $this->qrzApiKey = $this->config['QRZ']['apikey'];
+        }
+
+        // Clublog Details
+            if (!empty($this->config['CLUBLOG']['clublog_email']) &&
+            !empty($this->config['CLUBLOG']['clublog_password']) &&
+            !empty($this->config['CLUBLOG']['clublog_callsign'])
+        ) {
+            $this->clublogEmail = $this->config['CLUBLOG']['clublog_email'];
+            $this->clublogPassword = $this->config['CLUBLOG']['clublog_password'];
+            $this->clublogCallsign = $this->config['CLUBLOG']['clublog_callsign'];
+        }
     }
 
     private static function calculateDX($latFrom, $lonFrom, $latTo, $lonTo, $earthRadius = 6371000) {
@@ -138,119 +258,6 @@ class PS {
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadius * $c; // Distance in meters
-    }
-
-    private function checkPhp() {
-        $libs = [
-            'curl',
-            'mbstring',
-            'openssl'
-        ];
-        $msg = "\n" . PS::RED_BD . "ERROR:\n" . PS::GREEN_BD . "  PHP " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . " extension is not available.\n"
-            . PS::GREEN_BD ."  PHP version " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . ", "
-            . "php.ini file: " . PS::YELLOW_BD . "%s\n"
-            . PS::RESET;
-        foreach ($libs as $lib) {
-            if (!extension_loaded($lib)) {
-                print sprintf($msg, $lib, phpversion(),(php_ini_loaded_file() ? php_ini_loaded_file() : "None"));
-                die(0);
-            }
-        }
-    }
-
-    private function checkQrz() {
-        if (!@fsockopen('www.example.com', 80)) {
-            print
-                PS::RED_BD . "WARNING:\n"
-                . "  - You have no internet connection.\n"
-                . "  - Automatic gridquare and park name lookups will not work.\n"
-                . "  - QRZ uploads are not possible at this time.\n"
-                . PS::RESET
-                . "\n";
-            $this->hasInternet = false;
-            return;
-        }
-        $this->hasInternet = true;
-        if (empty($this->qrzLogin) || empty($this->qrzPass)) {
-            print
-                PS::RED_BD . "WARNING:\n"
-                . "  QRZ.com credentials were not found in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  . ".\n"
-                . "  Missing GSQ values for logged contacts cannot be fixed without\n"
-                . "  valid QRZ credentials.\n"
-                . PS::RESET;
-            return;
-        }
-        $url = sprintf(
-            "https://xmldata.qrz.com/xml/current/?username=%s;password=%s;agent=%s",
-            urlencode($this->qrzLogin),
-            urlencode($this->qrzPass),
-            urlencode(PS::USERAGENT)
-        );
-        $xml = file_get_contents($url, false, $this->HTTPcontext);
-        $data = simplexml_load_string($xml);
-        if (!empty($data->Session->Error)) {
-            print
-                PS::RED_BD . "ERROR:\n"
-                . "  QRZ.com reports " . PS::BLUE_BD . "\"" . trim($data->Session->Error) . "\"" . PS::RED_BD  ."\n"
-                . "  Missing GSQ values for logged contacts cannot be fixed without\n"
-                . "  valid QRZ credentials.\n"
-                . PS::RESET;
-            die(0);
-            return;
-        }
-        if (empty($data->Session->Key)) {
-            print
-                PS::RED_BD . "ERROR:\n  QRZ.com reports an invalid session key, so automatic log uploads are possible at this time.\n\n" . PS::RESET
-            . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
-            . PS::RESET;
-        } else {
-            $this->qrzSession = $data->Session->Key;
-        }
-        if (empty($this->qrzApiKey)) {
-            print
-                PS::RED_BD . "WARNING:\n"
-                . "  QRZ.com " . PS::BLUE_BD . "[QRZ]apikey" . PS::RED_BD . " is missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n"
-                . "  Without a valid XML Subscriber apikey, you won't be able to automatically upload\n"
-                . "  archived logs to QRZ.com.\n\n" . PS::RESET;
-            return;
-        }
-        try {
-            $url = sprintf(
-                "https://logbook.qrz.com/api?KEY=%s&ACTION=STATUS",
-                urlencode($this->qrzApiKey)
-            );
-            $raw = file_get_contents($url);
-        } catch (\Exception $e) {
-            print PS::RED_BD . "WARNING:\n  Unable to connect to QRZ.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
-            die(0);
-        }
-        $status = [];
-        $pairs = explode('&', $raw);
-        foreach ($pairs as $pair) {
-            list($key, $value) = explode('=', $pair, 2);
-            $status[$key] = $value;
-        }
-        if ($status['RESULT'] === 'OK') {
-            if (strtoupper($status['CALLSIGN']) !== strtoupper($this->qrzApiCallsign)) {
-                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
-                    . PS::BLUE_BD . "  - Wrong callsign for [QRZ]apikey\n" . PS::RESET;
-                die(0);
-            }
-            return;
-        }
-
-        if (isset($status['REASON'])) {
-            if (strpos($status['REASON'], 'invalid api key') !== false) {
-                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
-                    . PS::BLUE_BD . "  - Invalid QRZ Key\n" . PS::RESET;
-                die(0);
-            }
-            if (strpos($status['REASON'], 'user does not have a valid QRZ subscription') !== false) {
-                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
-                    . PS::BLUE_BD . "  - Not XML Subscriber\n\n" . PS::RESET;
-                die(0);
-            }
-        }
     }
 
     public static function convertGsqToDegrees($GSQ) {
@@ -293,6 +300,21 @@ class PS {
         ];
     }
 
+    private function clublogCheck() {
+        if (!$this->clublogCallsign) {
+            return false;
+        }
+        if (!$this->hasInternet) {
+            return false;
+        }
+        $url = sprintf(
+            "https://logs.classaxe.com/potashell/clublog/apikey?callsign=%s",
+            urlencode($this->clublogCallsign)
+        );
+        $this->clublogApikey = file_get_contents($url, false, $this->HTTPcontext);
+        return true;
+    }
+
     private static function dataCountActivations($data) {
         $dates = [];
         foreach ($data as $d) {
@@ -308,6 +330,62 @@ class PS {
             }
         }
         return $activations;
+    }
+
+    private function dataFix($data) {
+        $status = [
+            'COUNTRY' => [ 'missing' => 0, 'fixed' => 0],
+            'GRIDSQUARE' => [ 'missing' => 0, 'fixed' => 0],
+            'STATE' => [ 'missing' => 0, 'fixed' => 0]
+        ];
+
+        foreach ($data as &$record) {
+            if (empty($record)) {
+                continue;
+            }
+            if (empty($record['GRIDSQUARE'])) {
+                $status['GRIDSQUARE']['missing']++;
+                if ($record['GRIDSQUARE'] = $this->qrzGetGSQForCall($record['CALL'])) {
+                    $status['GRIDSQUARE']['fixed']++;
+                };
+            }
+            if (empty($record['COUNTRY'])) {
+                $status['COUNTRY']['missing']++;
+                if ($record['COUNTRY'] = $this->qrzGetItuForCall($record['CALL'])) {
+                    $status['COUNTRY']['fixed']++;
+                }
+            }
+            switch ($record['COUNTRY']) {
+                case 'Australia':
+                case 'Canada':
+                case 'United States':
+                    if (empty($record['STATE'])) {
+                        $status['STATE']['missing']++;
+                        if ($record['STATE'] = $this->qrzGetSpForCall($record['CALL'])) {
+                            $status['STATE']['fixed']++;
+                        }
+                    }
+                    break;
+            }
+            switch ($record['COUNTRY']) {
+                case 'United States':
+                    $record['COUNTRY'] = 'USA';
+                    break;
+            }
+            $record['MY_GRIDSQUARE'] =  $this->inputGSQ;
+            $record['MY_CITY'] =        $this->parkNameAbbr;
+            $record['PARK'] =           $this->inputPotaId;
+            $record['MODECOMP'] = ($record['MODE'] === 'MFSK' && $record['SUBMODE'] === 'FT4' ? 'FT4' : $record['MODE']);
+            $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
+            $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
+            if ($myLatLon && $theirLatLon) {
+                $record['DX'] = round(static::calculateDX($myLatLon['lat'], $myLatLon['lon'], $theirLatLon['lat'], $theirLatLon['lon']) / 1000);
+            }
+        }
+        return [
+            'data' => $this->dataSetColumnOrder($data),
+            'status' => $status
+        ];
     }
 
     private static function dataGetCountries($data, $date = null) {
@@ -428,243 +506,7 @@ class PS {
         return $gsqs;
     }
 
-    private function fixData($data) {
-        $status = [
-            'COUNTRY' => [ 'missing' => 0, 'fixed' => 0],
-            'GRIDSQUARE' => [ 'missing' => 0, 'fixed' => 0],
-            'STATE' => [ 'missing' => 0, 'fixed' => 0]
-        ];
-
-        foreach ($data as &$record) {
-            if (empty($record)) {
-                continue;
-            }
-            if (empty($record['GRIDSQUARE'])) {
-                $status['GRIDSQUARE']['missing']++;
-                if ($record['GRIDSQUARE'] = $this->getGSQForCall($record['CALL'])) {
-                    $status['GRIDSQUARE']['fixed']++;
-                };
-            }
-            if (empty($record['COUNTRY'])) {
-                $status['COUNTRY']['missing']++;
-                if ($record['COUNTRY'] = $this->getItuForCall($record['CALL'])) {
-                    $status['COUNTRY']['fixed']++;
-                }
-            }
-            switch ($record['COUNTRY']) {
-                case 'Australia':
-                case 'Canada':
-                case 'United States':
-                    if (empty($record['STATE'])) {
-                        $status['STATE']['missing']++;
-                        if ($record['STATE'] = $this->getSpForCall($record['CALL'])) {
-                            $status['STATE']['fixed']++;
-                        }
-                    }
-                    break;
-            }
-            switch ($record['COUNTRY']) {
-                case 'United States':
-                    $record['COUNTRY'] = 'USA';
-                    break;
-            }
-            $record['MY_GRIDSQUARE'] =  $this->inputGSQ;
-            $record['MY_CITY'] =        $this->parkNameAbbr;
-            $record['PARK'] =           $this->inputPotaId;
-            $record['MODECOMP'] = ($record['MODE'] === 'MFSK' && $record['SUBMODE'] === 'FT4' ? 'FT4' : $record['MODE']);
-            $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
-            $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
-            if ($myLatLon && $theirLatLon) {
-                $record['DX'] = round(static::calculateDX($myLatLon['lat'], $myLatLon['lon'], $theirLatLon['lat'], $theirLatLon['lon']) / 1000);
-            }
-        }
-        return [
-            'data' => $this->orderData($data),
-            'status' => $status
-        ];
-    }
-
-    private function getCliArgs() {
-        global $argv;
-        $arg1 = isset($argv[1]) ? $argv[1] : null;
-        $arg2 = isset($argv[2]) ? $argv[2] : null;
-        $arg3 = isset($argv[3]) ? $argv[3] : null;
-        $arg4 = isset($argv[4]) ? $argv[4] : null;
-        $arg5 = isset($argv[5]) ? $argv[5] : null;
-        $this->modeAudit = false;
-        $this->modeCheck = false;
-        $this->modeHelp = false;
-        $this->modePush =
-        $this->modeSpot = false;
-        $this->modeSyntax = false;
-        if ($arg1 && strtoupper($arg1) === 'AUDIT') {
-            $this->modeAudit = true;
-            return;
-        }
-        if ($arg1 && strtoupper($arg1) === 'HELP') {
-            $this->modeHelp = true;
-            return;
-        }
-        if ($arg1 && strtoupper($arg1) === 'SYNTAX') {
-            $this->modeSyntax = true;
-            return;
-        }
-        $this->inputPotaId = $arg1;
-        $this->inputGSQ = $arg2;
-        $this->modeCheck = $arg3 && strtoupper($arg3) === 'CHECK';
-        $this->modePush = $arg3 && strtoupper($arg3) === 'PUSH';
-        $this->modeSpot = $arg3 && strtoupper($arg3) === 'SPOT';
-        if ($this->modeSpot) {
-            $this->spotKhz = $arg4;
-            $this->spotComment = $arg5;
-        }
-    }
-
-    private function getInfoForCall($callsign) {
-        static $dataCache = [];
-        if (empty($this->qrzSession)) {
-            return false;
-        }
-        if (!isset($dataCache[$callsign])) {
-            $url = sprintf(
-                "https://xmldata.qrz.com/xml/current/?s=%s;callsign=%s;agent=%s",
-                urlencode($this->qrzSession),
-                urlencode($callsign),
-                urlencode(PS::USERAGENT)
-            );
-            $xml = file_get_contents($url, false, $this->HTTPcontext);
-            $dataCache[$callsign] = simplexml_load_string($xml);
-        }
-        return $dataCache[$callsign];
-    }
-
-    private function getGSQForCall($callsign) {
-        $data = $this->getInfoForCall($callsign);
-        if (empty($data->Callsign->grid)) {
-            print PS::RED_BD . "    WARNING: No gridsquare found at QRZ.com for callsign " . PS::BLUE_BD . $callsign . "\n" . PS::RESET;
-            return null;
-        }
-        return (string) $data->Callsign->grid;
-    }
-
-    private function getItuForCall($callsign) {
-        $data = $this->getInfoForCall($callsign);
-        if (empty($data->Callsign->country)) {
-            print PS::RED_BD . "    WARNING: No country found at QRZ.com for callsign " . PS::BLUE_BD . $callsign . "\n" . PS::RESET;
-            return null;
-        }
-        return (string) $data->Callsign->country;
-    }
-
-    private function getSpForCall($callsign) {
-        $data = $this->getInfoForCall($callsign);
-        return isset($data->Callsign->state) ? strtoupper((string) $data->Callsign->state) : null;
-    }
-
-
-    private function getHTTPContext() {
-        $this->HTTPcontext = stream_context_create([
-            'http'=> [
-                'method'=>"GET",
-                'header'=>"User-Agent: " . sprintf(PS::USERAGENT, $this->version, date('Y')) . "\r\n"
-            ]
-        ]);
-    }
-
-    private function getParkName($potaId) {
-        if ($this->hasInternet) {
-            $url = "https://api.pota.app/park/" . trim($potaId);
-            $data = file_get_contents($url, false, $this->HTTPcontext);
-            $data = json_decode($data);
-            if (!$data) {
-                return false;
-            }
-            $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
-            $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
-            return [
-                'name' => $parkName,
-                'abbr' => $parkNameAbbr
-            ];
-        }
-        return [
-            'name' => $potaId,
-            'abbr' => 'POTA: ' . $potaId
-        ];
-    }
-
-    private function getUserArgs() {
-        print "\n" . PS::YELLOW_BD . "ARGUMENTS:\n";
-        if ($this->inputPotaId === null) {
-            print PS::GREEN_BD . "  - Please provide POTA Park ID:  " . PS::BLUE_BD;
-            $fin = fopen("php://stdin","r");
-            $this->inputPotaId = trim(fgets($fin));
-        } else {
-            print PS::GREEN_BD . "  - Supplied POTA Park ID:        " . PS::BLUE_BD . $this->inputPotaId . "\n";
-        }
-        if ($this->inputGSQ === null) {
-            print PS::GREEN_BD . "  - Please provide 8/10-char GSQ: " . PS::CYAN_BD;
-            $fin = fopen("php://stdin","r");
-            $this->inputGSQ = trim(fgets($fin));
-        } else {
-            print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->inputGSQ . "\n";
-        }
-        $this->parkName = "POTA: " . $this->inputPotaId;
-        print "\n";
-    }
-
-    private function header() {
-        print PS::CLS . PS::YELLOW
-        . "**************\n"
-        . "* POTA SHELL *\n"
-        . "**************\n"
-        . "\n";
-    }
-
-    private function loadIni() {
-        $filename = 'potashell.ini';
-        $example =  'potashell.ini.example';
-        if (!file_exists(__DIR__ . DIRECTORY_SEPARATOR . $filename)) {
-            $this->header();
-            print
-                PS::RED_BD . "ERROR:\n"
-                . "  The " . PS::BLUE_BD . $filename . PS::RED_BD ." Configuration file was missing.\n";
-
-            $contents = file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $example);
-            $contents = str_replace("; This is a sample configuration file for potashell\r\n", '', $contents);
-            $contents = str_replace("; Copy this file to potashell.ini, and modify it to suit your own needs\r\n", '', $contents);
-            if (file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . $filename, $contents)) {
-                print
-                    PS::RED_BD . "  It has now been created.\n"
-                    . "  Please edit the new " . PS::BLUE_BD . $filename . PS::RED_BD ." file, and supply your own values.\n";
-            }
-            print PS::RESET . "\n";
-            die(0);
-        };
-        if (!$this->config = @parse_ini_file($filename, true)) {
-            print PS::RED_BD . "ERROR:\n  Unable to parse {$filename} file.\n" . PS::RESET . "\n";
-            die(0);
-        };
-        $this->pathAdifLocal = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
-        if (!file_exists($this->pathAdifLocal)) {
-            $this->header();
-            print
-                PS::RED_BD . "ERROR:\n"
-                . "  The specified " . PS::CYAN_BD . "[WSJTX] log_directory" . PS::RED_BD . " specified in " . PS::BLUE_BD . $filename . PS::RED_BD ." doesn't exist.\n"
-                . "  Please edit " . PS::BLUE_BD . $filename . PS::RED_BD ." and set the correct path to your WSJT-X log files.\n"
-                . PS::RESET . "\n";
-            die(0);
-        }
-        if (!empty($this->config['QRZ']['login']) && !empty($this->config['QRZ']['password'])) {
-            $this->qrzLogin = $this->config['QRZ']['login'];
-            $this->qrzPass = $this->config['QRZ']['password'];
-        }
-        if (!empty($this->config['QRZ']['apicallsign']) && !empty($this->config['QRZ']['apikey'])) {
-            $this->qrzApiCallsign = $this->config['QRZ']['apicallsign'];
-            $this->qrzApiKey = $this->config['QRZ']['apikey'];
-        }
-    }
-
-    private function orderData($data) {
+    private function dataSetColumnOrder($data) {
         $ordered = [];
         // Not using <=> for PHP 5.6 compatability
         usort($data, function ($a, $b) {
@@ -674,6 +516,7 @@ class PS {
         });
         usort($data, function ($a, $b) {
             if ($a['QSO_DATE'] > $b['QSO_DATE']) { return 1; }
+
             if ($a['QSO_DATE'] < $b['QSO_DATE']) { return -1; }
             return 0;
         });
@@ -687,6 +530,91 @@ class PS {
         return $ordered;
     }
 
+    private function getHTTPContext() {
+        $this->HTTPcontext = stream_context_create([
+            'http'=> [
+                'method'=>"GET",
+                'header'=>"User-Agent: " . sprintf(PS::USERAGENT, $this->version, date('Y')) . "\r\n"
+            ]
+        ]);
+    }
+
+    private function internetCheck() {
+        if (!@fsockopen('www.example.com', 80)) {
+            print
+                PS::RED_BD . "WARNING:\n"
+                . "  - You have no internet connection.\n"
+                . "  - Automatic gridquare and park name lookups will not work.\n"
+                . "  - QRZ uploads are not possible at this time.\n"
+                . PS::RESET
+                . "\n";
+            return;
+        }
+        $this->hasInternet = true;
+    }
+    private function phpCheck() {
+        $libs = [
+            'curl',
+            'mbstring',
+            'openssl'
+        ];
+        $msg = "\n" . PS::RED_BD . "ERROR:\n" . PS::GREEN_BD . "  PHP " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . " extension is not available.\n"
+            . PS::GREEN_BD ."  PHP version " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . ", "
+            . "php.ini file: " . PS::YELLOW_BD . "%s\n"
+            . PS::RESET;
+        foreach ($libs as $lib) {
+            if (!extension_loaded($lib)) {
+                print sprintf($msg, $lib, phpversion(),(php_ini_loaded_file() ? php_ini_loaded_file() : "None"));
+                die(0);
+            }
+        }
+    }
+
+    private function potaGetParkName($potaId) {
+        if (!$this->hasInternet) {
+            return [
+                'name' => $potaId,
+                'abbr' => 'POTA: ' . $potaId
+            ];
+        }
+        $url = "https://api.pota.app/park/" . trim($potaId);
+        $data = file_get_contents($url, false, $this->HTTPcontext);
+        $data = json_decode($data);
+        if (!$data) {
+            return false;
+        }
+        $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
+        $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
+        return [
+            'name' => $parkName,
+            'abbr' => $parkNameAbbr
+        ];
+    }
+
+    private function potaPublishSpot() {
+        $url = 'https://api.pota.app/spot/';
+        // $url = 'https://logs.classaxe.com/test.php';
+        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzApiCallsign);
+        $data = json_encode([
+            'activator' =>  $activator,
+            'spotter' =>    $this->qrzApiCallsign,
+            'frequency' =>  $this->spotKhz,
+            'reference' =>  $this->inputPotaId,
+            'source' =>     'Potashell ' . $this->version . ' - https://github.com/classaxe/potashell',
+            'comments' =>   $this->spotComment
+        ]);
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For HTTPS
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false); // For HTTPS
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [ 'Content-Type:application/json' ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+        curl_exec($ch);
+        $error = curl_error($ch);
+        curl_close($ch);
+        return $error ?: true;
+    }
+
     private function process() {
         print PS::YELLOW_BD . "STATUS:\n";
         if (!$this->modeAudit && (!$this->inputPotaId || !$this->inputGSQ)) {
@@ -698,7 +626,7 @@ class PS {
             $this->processAudit();
             return;
         }
-        if (!$lookup = $this->getParkName($this->inputPotaId)) {
+        if (!$lookup = $this->potaGetParkName($this->inputPotaId)) {
             print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputPotaId}.\n" . PS::RESET . "\n";
             die(0);
         }
@@ -782,7 +710,7 @@ class PS {
                 // if ($i++ > 4) { continue; }  // For development testing
                 $fn =       basename($file);
                 $parkId =   explode('.', explode('_', $fn)[2])[0];
-                $lookup =   $this->getParkName($parkId);
+                $lookup =   $this->potaGetParkName($parkId);
 
                 $adif =     new adif($file);
                 $data =     $adif->parser();
@@ -824,7 +752,7 @@ class PS {
     private function processParkArchiving() {
         $adif =     new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
         $data =     $adif->parser();
-        $result =   $this->fixData($data);
+        $result =   $this->dataFix($data);
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
         $date =     end($dates);
@@ -873,14 +801,14 @@ class PS {
             $this->pathAdifLocal . $this->fileAdifWsjtx,
             $this->pathAdifLocal . $this->fileAdifPark
         );
-        $result =   $this->fixData($data);
+        $result =   $this->dataFix($data);
         $data =     $result['data'];
         $status =   $result['status'];
         $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
         $stats = false;
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->uploadToQrz($data, $date);
+            $stats = $this->qrzUpload($data, $date);
         }
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
@@ -931,7 +859,7 @@ class PS {
         $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
         $adif =     new adif($this->pathAdifLocal . $fileAdif);
         $data =     $adif->parser();
-        $result =   $this->fixData($data);
+        $result =   $this->dataFix($data);
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
         $date =     end($dates);
@@ -966,7 +894,7 @@ class PS {
         $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
         $adif =     new adif($this->pathAdifLocal . $fileAdif);
         $data =     $adif->parser();
-        $result =   $this->fixData($data);
+        $result =   $this->dataFix($data);
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
         $date =     end($dates);
@@ -976,7 +904,7 @@ class PS {
         file_put_contents($this->pathAdifLocal . $fileAdif, $adif);
         $stats = false;
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->uploadToQrz($data, $date);
+            $stats = $this->qrzUpload($data, $date);
         }
         if ($stats) {
             print PS::GREEN_BD
@@ -992,17 +920,18 @@ class PS {
 
     private function processParkSpot() {
         $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
+        $linelen = 44 + strlen($this->spotComment);
         print PS::YELLOW_BD . "\nPENDING OPERATION:\n"
             . PS::GREEN_BD . "    The following spot will be published at pota.app:\n\n"
-            . PS::WHITE_BD . "    Activator  Spotter    KHz      Park Ref   Comments\n"
-            . "    " . str_repeat('-', 80) . "\n"
-            . "    "
+            . PS::WHITE_BD . "     Activator  Spotter    KHz      Park Ref   Comments\n"
+            . "    " . str_repeat('-', $linelen) . "\n"
+            . "     "
             . str_pad($activator, 10, ' ') . ' '
             . str_pad($this->qrzLogin, 10, ' ') . ' '
             . str_pad($this->spotKhz, 8, ' ') . ' '
             . str_pad($this->inputPotaId, 10, ' ') . ' '
             . $this->spotComment . "\n"
-            . "    " . str_repeat('-', 80) . "\n\n"
+            . "    " . str_repeat('-', $linelen) . "\n\n"
             . PS::YELLOW_BD . "CONFIRMATION REQUIRED:\n"
             . PS::GREEN_BD . "    Please confirm that you want to publish the spot: (Y/N) " . PS::BLUE_BD;
         $fin = fopen("php://stdin","r");
@@ -1011,7 +940,7 @@ class PS {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "    Spot has NOT been published.\n" . PS::RESET;
             return false;
         }
-        $result = $this->publishPotaSpot();
+        $result = $this->potaPublishSpot();
         if ($result === true) {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
                 . "  - Your spot at " . PS::BLUE_BD . $this->inputPotaId . PS::GREEN_BD . " on " . PS::MAGENTA_BD . $this->spotKhz . " KHz" . PS::GREEN_BD
@@ -1099,28 +1028,190 @@ class PS {
         print PS::RESET;
     }
 
-    private function publishPotaSpot() {
-        $url = 'https://api.pota.app/spot/';
-        // $url = 'https://logs.classaxe.com/test.php';
-        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzApiCallsign);
-        $data = json_encode([
-            'activator' =>  $activator,
-            'spotter' =>    $this->qrzApiCallsign,
-            'frequency' =>  $this->spotKhz,
-            'reference' =>  $this->inputPotaId,
-            'source' =>     'Potashell ' . $this->version . ' - https://github.com/classaxe/potashell',
-            'comments' =>   $this->spotComment
-        ]);
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For HTTPS
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false); // For HTTPS
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [ 'Content-Type:application/json' ]);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-        curl_exec($ch);
-        $error = curl_error($ch);
-        curl_close($ch);
-        return $error ?: true;
+    private function qrzCheck() {
+        if (!$this->hasInternet) {
+            return;
+        }
+        if (empty($this->qrzLogin) || empty($this->qrzPass)) {
+            print
+                PS::RED_BD . "WARNING:\n"
+                . "  QRZ.com credentials were not found in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  . ".\n"
+                . "  Missing GSQ values for logged contacts cannot be fixed without\n"
+                . "  valid QRZ credentials.\n"
+                . PS::RESET;
+            return;
+        }
+        $url = sprintf(
+            "https://xmldata.qrz.com/xml/current/?username=%s;password=%s;agent=%s",
+            urlencode($this->qrzLogin),
+            urlencode($this->qrzPass),
+            urlencode(PS::USERAGENT)
+        );
+        $xml = file_get_contents($url, false, $this->HTTPcontext);
+        $data = simplexml_load_string($xml);
+        if (!empty($data->Session->Error)) {
+            print
+                PS::RED_BD . "ERROR:\n"
+                . "  QRZ.com reports " . PS::BLUE_BD . "\"" . trim($data->Session->Error) . "\"" . PS::RED_BD  ."\n"
+                . "  Missing GSQ values for logged contacts cannot be fixed without\n"
+                . "  valid QRZ credentials.\n"
+                . PS::RESET;
+            die(0);
+            return;
+        }
+        if (empty($data->Session->Key)) {
+            print
+                PS::RED_BD . "ERROR:\n  QRZ.com reports an invalid session key, so automatic log uploads are possible at this time.\n\n" . PS::RESET
+                . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
+                . PS::RESET;
+        } else {
+            $this->qrzSession = $data->Session->Key;
+        }
+        if (empty($this->qrzApiKey)) {
+            print
+                PS::RED_BD . "WARNING:\n"
+                . "  QRZ.com " . PS::BLUE_BD . "[QRZ]apikey" . PS::RED_BD . " is missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n"
+                . "  Without a valid XML Subscriber apikey, you won't be able to automatically upload\n"
+                . "  archived logs to QRZ.com.\n\n" . PS::RESET;
+            return;
+        }
+        try {
+            $url = sprintf(
+                "https://logbook.qrz.com/api?KEY=%s&ACTION=STATUS",
+                urlencode($this->qrzApiKey)
+            );
+            $raw = file_get_contents($url);
+        } catch (\Exception $e) {
+            print PS::RED_BD . "WARNING:\n  Unable to connect to QRZ.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
+            die(0);
+        }
+        $status = [];
+        $pairs = explode('&', $raw);
+        foreach ($pairs as $pair) {
+            list($key, $value) = explode('=', $pair, 2);
+            $status[$key] = $value;
+        }
+        if ($status['RESULT'] === 'OK') {
+            if (strtoupper($status['CALLSIGN']) !== strtoupper($this->qrzApiCallsign)) {
+                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
+                    . PS::BLUE_BD . "  - Wrong callsign for [QRZ]apikey\n" . PS::RESET;
+                die(0);
+            }
+            return;
+        }
+
+        if (isset($status['REASON'])) {
+            if (strpos($status['REASON'], 'invalid api key') !== false) {
+                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
+                    . PS::BLUE_BD . "  - Invalid QRZ Key\n" . PS::RESET;
+                die(0);
+            }
+            if (strpos($status['REASON'], 'user does not have a valid QRZ subscription') !== false) {
+                print PS::RED_BD . "ERROR:\n  Unable to connect to QRZ.com for log uploads:\n"
+                    . PS::BLUE_BD . "  - Not XML Subscriber\n\n" . PS::RESET;
+                die(0);
+            }
+        }
+    }
+
+    private function qrzGetInfoForCall($callsign) {
+        static $dataCache = [];
+        if (empty($this->qrzSession)) {
+            return false;
+        }
+        if (!isset($dataCache[$callsign])) {
+            $url = sprintf(
+                "https://xmldata.qrz.com/xml/current/?s=%s;callsign=%s;agent=%s",
+                urlencode($this->qrzSession),
+                urlencode($callsign),
+                urlencode(PS::USERAGENT)
+            );
+            $xml = file_get_contents($url, false, $this->HTTPcontext);
+            $dataCache[$callsign] = simplexml_load_string($xml);
+        }
+        return $dataCache[$callsign];
+    }
+
+    private function qrzGetGSQForCall($callsign) {
+        $data = $this->qrzGetInfoForCall($callsign);
+        if (empty($data->Callsign->grid)) {
+            print PS::RED_BD . "    WARNING: No gridsquare found at QRZ.com for callsign " . PS::BLUE_BD . $callsign . "\n" . PS::RESET;
+            return null;
+        }
+        return (string) $data->Callsign->grid;
+    }
+
+    private function qrzGetItuForCall($callsign) {
+        $data = $this->qrzGetInfoForCall($callsign);
+        if (empty($data->Callsign->country)) {
+            print PS::RED_BD . "    WARNING: No country found at QRZ.com for callsign " . PS::BLUE_BD . $callsign . "\n" . PS::RESET;
+            return null;
+        }
+        return (string) $data->Callsign->country;
+    }
+
+    private function qrzGetSpForCall($callsign) {
+        $data = $this->qrzGetInfoForCall($callsign);
+        return isset($data->Callsign->state) ? strtoupper((string) $data->Callsign->state) : null;
+    }
+
+    private function qrzUpload($data, $date) {
+        $adifRecords = [];
+        foreach ($data as $record) {
+            if ($record['QSO_DATE'] !== (string) $date) {
+                continue;
+            }
+            $adifRecords[] = adif::toAdif([$record], $this->version, true, false);
+        }
+        $stats = [
+            'DUPLICATE' =>  0,
+            'ERROR' =>      0,
+            'INSERTED' =>   0,
+            'WRONG_CALL' => 0
+        ];
+        foreach ($adifRecords as $adifRecord) {
+            try {
+                $url = sprintf(
+                    "https://logbook.qrz.com/api?KEY=%s&ACTION=INSERT&ADIF=%s",
+                    urlencode($this->qrzApiKey),
+                    urlencode($adifRecord)
+                );
+                $raw = file_get_contents($url);
+            } catch (\Exception $e) {
+                print PS::RED_BD . "WARNING:\n  Unable to connect to QRZ.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
+                die(0);
+            }
+            $status = [];
+            $pairs = explode('&', $raw);
+            foreach ($pairs as $pair) {
+                list($key, $value) = explode('=', $pair, 2);
+                $status[$key] = $value;
+            }
+            switch ($status['RESULT']) {
+                case 'OK':
+                    $stats['INSERTED']++;
+                    break;
+                case 'FAIL':
+                    if ($status['REASON'] === 'Unable to add QSO to database: duplicate') {
+                        $stats['DUPLICATE']++;
+                    } elseif (strpos($status['REASON'], 'wrong station_callsign for this logbook') !== false) {
+                        $stats['WRONG_CALL']++;
+                    } else {
+                        print $status['REASON'] . "\n";
+                        $stats['ERROR']++;
+                    }
+                    break;
+            }
+        }
+        return $stats;
+    }
+
+    private function showHeader() {
+        print PS::CLS . PS::YELLOW
+            . "**************\n"
+            . "* POTA SHELL *\n"
+            . "**************\n"
+            . "\n";
     }
 
     private function showHelp() {
@@ -1307,57 +1398,6 @@ class PS {
                     . $this->showSyntax(3) . "\n"
                     . $this->showSyntax(4) . PS::RESET;
         }
-    }
-
-    private function uploadToQrz($data, $date) {
-        $adifRecords = [];
-        foreach ($data as $record) {
-            if ($record['QSO_DATE'] !== (string) $date) {
-                continue;
-            }
-            $adifRecords[] = adif::toAdif([$record], $this->version, true, false);
-        }
-        $stats = [
-            'DUPLICATE' =>  0,
-            'ERROR' =>      0,
-            'INSERTED' =>   0,
-            'WRONG_CALL' => 0
-        ];
-        foreach ($adifRecords as $adifRecord) {
-            try {
-                $url = sprintf(
-                    "https://logbook.qrz.com/api?KEY=%s&ACTION=INSERT&ADIF=%s",
-                    urlencode($this->qrzApiKey),
-                    urlencode($adifRecord)
-                );
-                $raw = file_get_contents($url);
-            } catch (\Exception $e) {
-                print PS::RED_BD . "WARNING:\n  Unable to connect to QRZ.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
-                die(0);
-            }
-            $status = [];
-            $pairs = explode('&', $raw);
-            foreach ($pairs as $pair) {
-                list($key, $value) = explode('=', $pair, 2);
-                $status[$key] = $value;
-            }
-            switch ($status['RESULT']) {
-                case 'OK':
-                    $stats['INSERTED']++;
-                    break;
-                case 'FAIL':
-                    if ($status['REASON'] === 'Unable to add QSO to database: duplicate') {
-                        $stats['DUPLICATE']++;
-                    } elseif (strpos($status['REASON'], 'wrong station_callsign for this logbook') !== false) {
-                        $stats['WRONG_CALL']++;
-                    } else {
-                        print $status['REASON'] . "\n";
-                        $stats['ERROR']++;
-                    }
-                    break;
-            }
-        }
-        return $stats;
     }
 }
 
