@@ -74,6 +74,7 @@ class PS {
         'Wilderness Park' =>            'WP',
     ];
 
+    private $argCheckBand;
     private $config;
     private $clublogApikey;
     private $clublogCallsign;
@@ -163,6 +164,9 @@ class PS {
         if ($this->modeSpot) {
             $this->spotKhz = $arg4;
             $this->spotComment = $arg5;
+        }
+        if ($this->modeCheck) {
+            $this->argCheckBand = $arg4;
         }
     }
 
@@ -388,10 +392,16 @@ class PS {
         ];
     }
 
-    private static function dataGetCountries($data, $date = null) {
+    private static function dataGetCountries($data, $date = null, $band = null) {
         $countries = [];
         foreach ($data as $d) {
-            if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['COUNTRY'])) {
+            if ($date && (int)$d['QSO_DATE'] !== $date) {
+                continue;
+            }
+            if ($band && $d['BAND'] !== $band) {
+                continue;
+            }
+            if (!empty($d['COUNTRY'])) {
                 if (!isset($countries[$d['COUNTRY']])) {
                     $countries[$d['COUNTRY']] = 0;
                 }
@@ -409,10 +419,16 @@ class PS {
         return array_keys($countriesWithCounts);
     }
 
-    private static function dataGetBestDx($data, $date = null) {
+    private static function dataGetBestDx($data, $date = null, $band = null) {
         $DX = 0;
         foreach ($data as $d) {
-            if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['DX']) && $d['DX'] > $DX) {
+            if ($date && (int) $d['QSO_DATE'] !== $date) {
+                continue;
+            }
+            if ($band && $d['BAND'] !== $band) {
+                continue;
+            }
+            if (!empty($d['DX']) && $d['DX'] > $DX) {
                 $DX = $d['DX'];
             }
         }
@@ -430,10 +446,16 @@ class PS {
         return array_keys($unique);
     }
 
-    private static function dataGetStates($data, $date = null) {
+    private static function dataGetStates($data, $date = null, $band = null) {
         $states = [];
         foreach ($data as $d) {
-            if ((!$date || $d['QSO_DATE'] == $date) && !empty($d['STATE'])) {
+            if ($date && (int) $d['QSO_DATE'] !== $date) {
+                continue;
+            }
+            if ($band && $band !== $d['BAND']) {
+                continue;
+            }
+            if (!empty($d['STATE'])) {
                 if (!isset($states[$d['STATE']])) {
                     $states[$d['STATE']] = 0;
                 }
@@ -464,9 +486,13 @@ class PS {
     private static function dataCountLogs($data, $date = null, $band = null) {
         $unique = [];
         foreach ($data as $d) {
-            if (!$date || $d['QSO_DATE'] == $date) {
-                $unique[$d['QSO_DATE'] . '|' . $d['CALL'] . '|' . $d['BAND']] = true;
+            if ($date && (int) $d['QSO_DATE'] !== $date) {
+                continue;
             }
+            if ($band && $band !== $d['BAND']) {
+                continue;
+            }
+            $unique[$d['QSO_DATE'] . '|' . $d['CALL'] . '|' . $d['BAND']] = true;
         }
         return count($unique);
     }
@@ -491,12 +517,16 @@ class PS {
         return $dates;
     }
 
-    private static function dataGetLogs($data, $date = null) {
+    private static function dataGetLogs($data, $date = null, $band = null) {
         $logs = [];
         foreach ($data as $d) {
-            if (!$date || $d['QSO_DATE'] == $date) {
-                $logs[] = $d;
+            if ($date && (int) $d['QSO_DATE'] !== $date) {
+                continue;
             }
+            if ($band && $d['BAND'] !== $band) {
+                continue;
+            }
+            $logs[] = $d;
         }
         return $logs;
     }
@@ -730,16 +760,16 @@ class PS {
                     print PS::RED_BD . "ERROR - file " . $fn . " has no 'MY_GRIDSQUARE column\n";
                     continue;
                 }
-                $dates =    PS::dataGetDates($data);
+                $dates =    static::dataGetDates($data);
                 $date =     end($dates);
-                $LS =       PS::dataCountLogs($data, $date);
-                $LT =       PS::dataCountLogs($data);
-                $MG =       PS::dataCountMissingGsq($data);
+                $LS =       static::dataCountLogs($data, $date);
+                $LT =       static::dataCountLogs($data);
+                $MG =       static::dataCountMissingGsq($data);
                 $ST =       count($dates);
-                $AT =       PS::dataCountActivations($data);
+                $AT =       static::dataCountActivations($data);
                 $FT =       $ST - $AT;
-                $B =        PS::dataCountBands($data);
-                $DX =       PS::dataGetBestDx($data);
+                $B =        static::dataCountBands($data);
+                $DX =       static::dataGetBestDx($data);
                 print
                     PS::BLUE_BD . str_pad($parkId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
@@ -876,6 +906,7 @@ class PS {
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
         $date =     end($dates);
+        $band =     $this->argCheckBand;
         $logs =     $this->dataCountLogs($data, $date);
         $MGs =      $this->dataCountMissingGsq($data);
         $locs =     $this->dataGetLocations($data);
@@ -883,8 +914,8 @@ class PS {
         print PS::GREEN_BD . "  - File " . PS::BLUE_BD . "{$fileAdif}" . PS::GREEN_BD
             . " exists and contains " . PS::CYAN_BD . count($data) . PS::GREEN_BD . " entries.\n"
             . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
-            . static::showStats($data, $date)
-            . static::showLogs($data, $date)
+            . static::showStats($data, $date, $band)
+            . static::showLogs($data, $date, $band)
             . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
@@ -1274,6 +1305,7 @@ class PS {
             . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
             . "       - Missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n"
             . "       - No files are renamed.\n"
+            . "       - An optional " . PS::MAGENTA_BD . "band" . PS::YELLOW . " argument will limit stats to only contacts made on that band.\n"
             . "\n" . PS::YELLOW_BD
             . "     d) THE \"PUSH\" MODE:\n" . PS::YELLOW
             . "       - If the " . PS::GREEN_BD . "PUSH" . PS::YELLOW . " argument is given, system operates directly on either\n"
@@ -1303,8 +1335,11 @@ class PS {
             . PS::RESET ."\n";
     }
 
-    private static function showLogs($data, $date) {
-        $logs =         static::dataGetLogs($data, $date);
+    private static function showLogs($data, $date = null, $band = null) {
+        $logs =         static::dataGetLogs($data, $date, $band);
+        if (!$logs) {
+            return "";
+        }
         $columns =      [
             ['label' => '#',        'src' => '',                 'len' => 3],
             ['label' => 'DATE',     'src' => 'QSO_DATE',         'len' => 4],
@@ -1318,7 +1353,7 @@ class PS {
             ['label' => 'STATE',    'src' => 'STATE',            'len' => 5],
             ['label' => 'COUNTRY',  'src' => 'COUNTRY',          'len' => 7],
             ['label' => 'GSQ',      'src' => 'GRIDSQUARE',       'len' => 3],
-            ['label' => 'KM',       'src' => 'DX',               'len' => 2],
+            ['label' => 'KM',       'src' => 'DX',               'len' => 3],
         ];
         foreach ($logs as $log) {
             foreach ($columns as &$column) {
@@ -1361,30 +1396,37 @@ class PS {
             . "\n";
     }
 
-    private static function showStats($data, $date) {
-        $logs =         static::dataCountLogs($data, $date);
-        $countries =    static::dataGetCountries($data, $date);
-        $dx =           static::dataGetBestDx($data, $date);
-        $states =       static::dataGetStates($data, $date);
+    private static function showStats($data, $date, $band = null) {
+        $logs =         static::dataCountLogs($data, $date, $band);
+        $countries =    static::dataGetCountries($data, $date, $band);
+        $dx =           static::dataGetBestDx($data, $date, $band);
+        $states =       static::dataGetStates($data, $date, $band);
 
         return
-          PS::GREEN_BD . "  - Stats for last session on " . PS::CYAN_BD
-        . substr($date, 0, 4) . "-"
-        . substr($date, 4, 2) . "-"
-        . substr($date, 6, 2)
-        . PS::GREEN_BD . ":\n"
-        . "    There were " . PS::CYAN_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's')
-        . " from " . PS::CYAN_BD . count($countries) . PS::GREEN_BD . " " . (count($countries) === 1 ? "country" : "countries")
-        . (count($states) ? " and " . PS::CYAN_BD . count($states) . PS::GREEN_BD . " state" . (count($states) === 1 ? "" : "s") : "")
-        . " - best DX was " . PS::BLUE_BD . $dx . PS::GREEN_BD . " KM.\n"
-        . "      - " . (count($countries) === 1 ? "Country:   " : "Countries: ")
-        . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
-        . (count($states) ? "      - "
-            . (count($states) === 1 ? "State:     ": "States:    ")
-            . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $states) . PS::GREEN_BD . "\n"
-            : ""
-        )
-        . "\n";
+              PS::GREEN_BD . "  - Stats for last session on " . PS::CYAN_BD
+            . substr($date, 0, 4) . "-"
+            . substr($date, 4, 2) . "-"
+            . substr($date, 6, 2)
+            . PS::GREEN_BD
+            . ($band ? " on " . PS::CYAN_BD . $band . PS::GREEN_BD : "")
+            . ":\n"
+            . "    There were " . PS::CYAN_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's')
+            . " from " . PS::CYAN_BD . count($countries) . PS::GREEN_BD . " " . (count($countries) === 1 ? "country" : "countries")
+            . (count($states) ? " and " . PS::CYAN_BD . count($states) . PS::GREEN_BD . " state" . (count($states) === 1 ? "" : "s") : "")
+            . ($logs ? " - best DX was " . PS::BLUE_BD . number_format($dx) . PS::GREEN_BD . " KM." : "")
+            ."\n"
+            . (count($countries) ?
+                  "      - " . (count($countries) === 1 ? "Country:   " : "Countries: ")
+                . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
+                . (count($states) ? "      - "
+                . (count($states) === 1 ?
+                      "State:     ": "States:    ")
+                    . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $states) . PS::GREEN_BD . "\n"
+                    : ""
+                    )
+                  . "\n"
+                  : ""
+              );
     }
 
     private function showSyntax($step = false) {
@@ -1395,6 +1437,7 @@ class PS {
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK " . PS::MAGENTA_BD . "160m\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "PUSH\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "\"FT8 - QRP 4w\"\n"
                     ;
