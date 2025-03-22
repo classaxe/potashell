@@ -260,7 +260,7 @@ class PS {
         return $earthRadius * $c; // Distance in meters
     }
 
-    public static function convertGsqToDegrees($GSQ) {
+    private static function convertGsqToDegrees($GSQ) {
         $regExp =
             '/^(?:[a-rA-R]{2}[0-9]{2}|'                                 // FN03
             .'[a-rA-R]{2}[0-9]{2}[a-xA-X]{2}|'                          // FN03HR
@@ -451,7 +451,17 @@ class PS {
         return array_keys($statesWithCounts);
     }
 
-    private static function dataCountLogs($data, $date = null) {
+    private static function dataCountBands($data, $date = null) {
+        $unique = [];
+        foreach ($data as $d) {
+            if (!$date || $d['QSO_DATE'] == $date) {
+                $unique[$d['BAND']] = true;
+            }
+        }
+        return count($unique);
+    }
+
+    private static function dataCountLogs($data, $date = null, $band = null) {
         $unique = [];
         foreach ($data as $d) {
             if (!$date || $d['QSO_DATE'] == $date) {
@@ -700,9 +710,10 @@ class PS {
             . "  #FA = Failed Activations\n"
             . "  #MG = Missing Grid Squares\n"
             . "  #LS = Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
+            . "  #B  = Number of bands\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', $lineLen) . "\n"
-            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | DX KM | Park Name in Log File\n"
+            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B | DX KM | Park Name in Log File\n"
             . str_repeat('-', $lineLen) . "\n";
         $i = 0;
         foreach ($files as $file) {
@@ -727,6 +738,7 @@ class PS {
                 $ST =       count($dates);
                 $AT =       PS::dataCountActivations($data);
                 $FT =       $ST - $AT;
+                $B =        PS::dataCountBands($data);
                 $DX =       PS::dataGetBestDx($data);
                 print
                     PS::BLUE_BD . str_pad($parkId, 8, ' ') . PS::GREEN_BD . " | "
@@ -742,6 +754,7 @@ class PS {
                     . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
 
                     . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
+                    . str_pad($B, 2, ' ', STR_PAD_LEFT) . " | "
                     . str_pad($DX, 5, ' ', STR_PAD_LEFT) . " | "
                     . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . "Lookup failed" . PS::GREEN_BD) . "\n";
             }
