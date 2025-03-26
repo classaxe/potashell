@@ -398,7 +398,7 @@ class PS {
             if ($date && (int)$d['QSO_DATE'] !== $date) {
                 continue;
             }
-            if ($band && $d['BAND'] !== $band) {
+            if ($band && strtolower($d['BAND']) !== strtolower($band)) {
                 continue;
             }
             if (!empty($d['COUNTRY'])) {
@@ -425,7 +425,7 @@ class PS {
             if ($date && (int) $d['QSO_DATE'] !== $date) {
                 continue;
             }
-            if ($band && $d['BAND'] !== $band) {
+            if ($band && strtolower($d['BAND']) !== strtolower($band)) {
                 continue;
             }
             if (!empty($d['DX']) && $d['DX'] > $DX) {
@@ -452,7 +452,7 @@ class PS {
             if ($date && (int) $d['QSO_DATE'] !== $date) {
                 continue;
             }
-            if ($band && $band !== $d['BAND']) {
+            if ($band && strtolower($band) !== strtolower($d['BAND'])) {
                 continue;
             }
             if (!empty($d['STATE'])) {
@@ -489,7 +489,7 @@ class PS {
             if ($date && (int) $d['QSO_DATE'] !== $date) {
                 continue;
             }
-            if ($band && $band !== $d['BAND']) {
+            if ($band && strtolower($band) !== strtolower($d['BAND'])) {
                 continue;
             }
             $unique[$d['QSO_DATE'] . '|' . $d['CALL'] . '|' . $d['BAND']] = true;
@@ -523,7 +523,7 @@ class PS {
             if ($date && (int) $d['QSO_DATE'] !== $date) {
                 continue;
             }
-            if ($band && $d['BAND'] !== $band) {
+            if ($band && strtolower($d['BAND']) !== strtolower($band)) {
                 continue;
             }
             $logs[] = $d;
@@ -1251,11 +1251,11 @@ class PS {
     }
 
     private function showHeader() {
+        $name = 'POTA SHELL ' . $this->version;
         print PS::CLS . PS::YELLOW
-            . "**************\n"
-            . "* POTA SHELL *\n"
-            . "**************\n"
-            . "\n";
+            . str_repeat('*', strlen($name) + 4) . "\n"
+            . '* ' . PS::YELLOW_BD . 'POTA SHELL ' . $this->version . PS::YELLOW . " *\n"
+            . str_repeat('*', strlen($name) + 4) . "\n";
     }
 
     private function showHelp() {
