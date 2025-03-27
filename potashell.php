@@ -383,7 +383,7 @@ class PS {
             $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
             $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
             if ($myLatLon && $theirLatLon) {
-                $record['DX'] = round(static::calculateDX($myLatLon['lat'], $myLatLon['lon'], $theirLatLon['lat'], $theirLatLon['lon']) / 1000);
+                $record['DX'] = number_format(round(static::calculateDX($myLatLon['lat'], $myLatLon['lon'], $theirLatLon['lat'], $theirLatLon['lon']) / 1000));
             }
         }
         return [
@@ -428,8 +428,11 @@ class PS {
             if ($band && strtolower($d['BAND']) !== strtolower($band)) {
                 continue;
             }
-            if (!empty($d['DX']) && $d['DX'] > $DX) {
-                $DX = $d['DX'];
+            if (!empty($d['DX'])) {
+                $d['DX'] = str_replace(',', '', $d['DX']);
+                if ($d['DX'] > $DX) {
+                    $DX = $d['DX'];
+                }
             }
         }
         return $DX;
@@ -743,7 +746,7 @@ class PS {
             . "  #B  = Number of bands\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', $lineLen) . "\n"
-            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B | DX KM | Park Name in Log File\n"
+            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | Park Name in Log File\n"
             . str_repeat('-', $lineLen) . "\n";
         $i = 0;
         foreach ($files as $file) {
@@ -769,7 +772,7 @@ class PS {
                 $AT =       static::dataCountActivations($data);
                 $FT =       $ST - $AT;
                 $B =        static::dataCountBands($data);
-                $DX =       static::dataGetBestDx($data);
+                $DX =       number_format(static::dataGetBestDx($data));
                 print
                     PS::BLUE_BD . str_pad($parkId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
@@ -785,7 +788,7 @@ class PS {
 
                     . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
                     . str_pad($B, 2, ' ', STR_PAD_LEFT) . " | "
-                    . str_pad($DX, 5, ' ', STR_PAD_LEFT) . " | "
+                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . " | "
                     . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . "Lookup failed" . PS::GREEN_BD) . "\n";
             }
         }
@@ -1362,10 +1365,11 @@ class PS {
                 }
             }
         }
+
         $columns[0]['len'] = strlen('' . (1 + count($logs)));
-        $num = str_pad(' #', $columns[0]['len'], ' ', STR_PAD_LEFT);
+        $num = str_repeat(' ', strlen(number_format(count($logs)))) . '#';
         $header = [$num];
-        $header_bd = [$num];
+        $header_bd = [PS::CYAN_BD . $num . PS::GREEN];
         foreach ($columns as &$column) {
             if ($column['src'] === '') {
                 continue;
@@ -1377,22 +1381,29 @@ class PS {
         $head_bd =  implode(' | ', $header_bd);
         $rows = [];
         foreach ($logs as $i => $log) {
-            $row = [str_pad('' . (1 + $i), $columns[0]['len'], ' ', STR_PAD_LEFT)];
+            $row = [PS::YELLOW_BD . str_pad('' . (1 + $i), $columns[0]['len'], ' ', STR_PAD_LEFT) . PS::GREEN];
             foreach ($columns as &$column) {
                 if ($column['src'] === '') {
                     continue;
                 }
-                $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len']) . PS::GREEN;
+                switch($column['src']) {
+                    case 'DX':
+                        $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len'], " ", STR_PAD_LEFT) . PS::GREEN;
+                        break;
+                    default:
+                        $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len']) . PS::GREEN;
+                        break;
+                }
             }
             $rows[] = implode(' | ', $row);
         }
         return
             PS::YELLOW_BD . "LOGS:\n" . PS::GREEN
-            . str_repeat('-', strlen($head)) . "\n"
+            . str_repeat('-', strlen($head) + 1) . "\n"
             . $head_bd . "\n"
-            . str_repeat('-', strlen($head)) . "\n"
-            . implode("\n", $rows) . "\n"
-            . str_repeat('-', strlen($head)) . "\n"
+            . str_repeat('-', strlen($head) + 1) . "\n"
+            . " " . implode("\n ", $rows) . "\n"
+            . str_repeat('-', strlen($head) + 1) . "\n"
             . "\n";
     }
 
