@@ -33,6 +33,7 @@ class PS {
         'COMMENT',
         'DX'
     ];
+    const MAXLEN = 120;
 
     const USERAGENT =   "POTASHELL v%s | https://github.com/classaxe/potashell | Copyright (C) %s Martin Francis VA3PHP";
     const RED =         "\e[0;31m";
@@ -588,14 +589,14 @@ class PS {
         return $ordered;
     }
 
-    private static function formatLineWrap($lineLen, $indent, $data) {
+    private static function formatLineWrap($maxLen, $indent, $data) {
         $tmp = [];
-        $line = $indent;
+        $lineLen = $indent;
         foreach ($data as $item => $count) {
-            $line += strlen($item . ($count > 1 ? ' ('.$count . ')' : ''));
-            if ($line >= $lineLen) {
-                $item = "\n" . str_repeat(' ', $indent) . $item . ($count > 1 ? ' ('.$count . ')' : '');
-                $line= $indent;
+            $lineLen += strlen($item . ($count > 1 ? ' (' . $count . ')' : '') . ',');
+            if ($lineLen > $maxLen) {
+                $item = "\n" . str_repeat(' ', $indent) . $item . ($count > 1 ? PS::CYAN_BD . ' (' . $count . ')' : '');
+                $lineLen = $indent;
             } else {
                 $item .= ($count > 1 ? PS::CYAN_BD . ' ('.$count . ')' : '');
             }
@@ -771,7 +772,6 @@ class PS {
     }
 
     private function processAudit() {
-        $lineLen = 120;
         print PS::GREEN_BD . "Performing Audit on all POTA Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
@@ -788,9 +788,9 @@ class PS {
             . "  #LS = Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
             . "  #B  = Number of bands\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
-            . str_repeat('-', $lineLen) . "\n"
+            . str_repeat('-', PS::MAXLEN) . "\n"
             . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | Park Name in Log File\n"
-            . str_repeat('-', $lineLen) . "\n";
+            . str_repeat('-', PS::MAXLEN) . "\n";
         $i = 0;
         foreach ($files as $file) {
             if (is_file($file)) {
@@ -835,7 +835,7 @@ class PS {
                     . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . "Lookup failed" . PS::GREEN_BD) . "\n";
             }
         }
-        print str_repeat('-', $lineLen) . PS::RESET . "\n";
+        print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
     }
 
     private function processParkArchiving() {
@@ -1467,7 +1467,6 @@ class PS {
         $countries =    static::dataGetCountries($data, $date, $band);
         $dx =           static::dataGetBestDx($data, $date, $band);
         $states =       static::dataGetStates($data, $date, $band);
-        $lineLen =      120;
         $indent =       20;
 
         $header = PS::GREEN_BD . "  - "
@@ -1486,9 +1485,9 @@ class PS {
             . ($logs ? " - best DX was " . PS::BLUE_BD . number_format($dx) . PS::GREEN_BD . " KM." : "")
             ."\n";
 
-        $bands =        PS::formatLineWrap($lineLen, $indent, $bands);
-        $countries =    PS::formatLineWrap($lineLen, $indent, $countries);
-        $states =       PS::formatLineWrap($lineLen, $indent, $states);
+        $bands =        PS::formatLineWrap(PS::MAXLEN, $indent, $bands);
+        $countries =    PS::formatLineWrap(PS::MAXLEN, $indent, $countries);
+        $states =       PS::formatLineWrap(PS::MAXLEN, $indent, $states);
 
         return
               $header
