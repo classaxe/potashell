@@ -87,11 +87,14 @@ class PS {
     private $hasInternet = false;
     private $inputGSQ;
     private $inputPotaId;
+    private $mode;
     private $modeAudit;
     private $modeCheck;
     private $modeHelp;
     private $modePush;
+    private $modeReview;
     private $modeSpot;
+    private $modeSummary;
     private $modeSyntax;
     private $HTTPcontext;
     private $parkName;
@@ -141,8 +144,10 @@ class PS {
         $this->modeAudit = false;
         $this->modeCheck = false;
         $this->modeHelp = false;
-        $this->modePush =
+        $this->modePush = false;
+        $this->modeReview = false;
         $this->modeSpot = false;
+        $this->modeSummary = false;
         $this->modeSyntax = false;
         if ($arg1 && strtoupper($arg1) === 'AUDIT') {
             $this->modeAudit = true;
@@ -156,17 +161,20 @@ class PS {
             $this->modeSyntax = true;
             return;
         }
-        $this->inputPotaId = $arg1;
-        $this->inputGSQ = $arg2;
-        $this->modeCheck = $arg3 && strtoupper($arg3) === 'CHECK';
-        $this->modePush = $arg3 && strtoupper($arg3) === 'PUSH';
-        $this->modeSpot = $arg3 && strtoupper($arg3) === 'SPOT';
+        $this->inputPotaId =    $arg1;
+        $this->inputGSQ =       $arg2;
+        $this->mode =           $arg3;
+        $this->modeCheck =      $this->mode && strtoupper($this->mode) === 'CHECK';
+        $this->modePush =       $this->mode && strtoupper($this->mode) === 'PUSH';
+        $this->modeReview =     $this->mode && strtoupper($this->mode) === 'REVIEW';
+        $this->modeSpot =       $this->mode && strtoupper($this->mode) === 'SPOT';
+        $this->modeSummary =    $this->mode && strtoupper($this->mode) === 'SUMMARY';
+        if ($this->modeCheck || $this->modeReview || $this->modeSummary) {
+            $this->argCheckBand = $arg4;
+        }
         if ($this->modeSpot) {
             $this->spotKhz = $arg4;
             $this->spotComment = $arg5;
-        }
-        if ($this->modeCheck) {
-            $this->argCheckBand = $arg4;
         }
     }
 
@@ -392,8 +400,8 @@ class PS {
         ];
     }
 
-    private static function dataGetCountries($data, $date = null, $band = null) {
-        $countries = [];
+    private static function dataGetBands($data, $date = null, $band = null) {
+        $tmp = [];
         foreach ($data as $d) {
             if ($date && (int)$d['QSO_DATE'] !== $date) {
                 continue;
@@ -401,23 +409,17 @@ class PS {
             if ($band && strtolower($d['BAND']) !== strtolower($band)) {
                 continue;
             }
-            if (!empty($d['COUNTRY'])) {
-                if (!isset($countries[$d['COUNTRY']])) {
-                    $countries[$d['COUNTRY']] = 0;
+            if (!empty($d['BAND'])) {
+                if (!isset($tmp[$d['BAND']])) {
+                    $tmp[$d['BAND']] = 0;
                 }
-                $countries[$d['COUNTRY']] ++;
+                $tmp[$d['BAND']] ++;
             }
         }
-        ksort($countries);
-        $countriesWithCounts = [];
-        foreach ($countries as $country => $count) {
-            if ($count > 1) {
-                $country .= PS::CYAN_BD . " (" . $count . ")";
-            }
-            $countriesWithCounts[$country] = $count;
-        }
-        return array_keys($countriesWithCounts);
+        ksort($tmp);
+        return $tmp;
     }
+
 
     private static function dataGetBestDx($data, $date = null, $band = null) {
         $DX = 0;
@@ -438,6 +440,26 @@ class PS {
         return $DX;
     }
 
+    private static function dataGetCountries($data, $date = null, $band = null) {
+        $tmp = [];
+        foreach ($data as $d) {
+            if ($date && (int)$d['QSO_DATE'] !== $date) {
+                continue;
+            }
+            if ($band && strtolower($d['BAND']) !== strtolower($band)) {
+                continue;
+            }
+            if (!empty($d['COUNTRY'])) {
+                if (!isset($tmp[$d['COUNTRY']])) {
+                    $tmp[$d['COUNTRY']] = 0;
+                }
+                $tmp[$d['COUNTRY']] ++;
+            }
+        }
+        ksort($tmp);
+        return $tmp;
+    }
+
     private static function dataGetLocations($data) {
         $unique = [];
         foreach ($data as $d) {
@@ -450,7 +472,7 @@ class PS {
     }
 
     private static function dataGetStates($data, $date = null, $band = null) {
-        $states = [];
+        $tmp = [];
         foreach ($data as $d) {
             if ($date && (int) $d['QSO_DATE'] !== $date) {
                 continue;
@@ -459,21 +481,14 @@ class PS {
                 continue;
             }
             if (!empty($d['STATE'])) {
-                if (!isset($states[$d['STATE']])) {
-                    $states[$d['STATE']] = 0;
+                if (!isset($tmp[$d['STATE']])) {
+                    $tmp[$d['STATE']] = 0;
                 }
-                $states[$d['STATE']] ++;
+                $tmp[$d['STATE']] ++;
             }
         }
-        ksort($states);
-        $statesWithCounts = [];
-        foreach ($states as $state => $count) {
-            if ($count > 1) {
-                $state .= PS::CYAN_BD . " (" . $count . ")";
-            }
-            $statesWithCounts[$state] = $count;
-        }
-        return array_keys($statesWithCounts);
+        ksort($tmp);
+        return $tmp;
     }
 
     private static function dataCountBands($data, $date = null) {
@@ -571,6 +586,22 @@ class PS {
             $ordered[] = $out;
         }
         return $ordered;
+    }
+
+    private static function formatLineWrap($lineLen, $indent, $data) {
+        $tmp = [];
+        $line = $indent;
+        foreach ($data as $item => $count) {
+            $line += strlen($item . ($count > 1 ? ' ('.$count . ')' : ''));
+            if ($line >= $lineLen) {
+                $item = "\n" . str_repeat(' ', $indent) . $item . ($count > 1 ? ' ('.$count . ')' : '');
+                $line= $indent;
+            } else {
+                $item .= ($count > 1 ? PS::CYAN_BD . ' ('.$count . ')' : '');
+            }
+            $tmp[] = $item;
+        }
+        return $tmp;
     }
 
     private function getHTTPContext() {
@@ -675,8 +706,10 @@ class PS {
         }
         $this->parkName =       $lookup['name'];
         $this->parkNameAbbr =   $lookup['abbr'];
-        print PS::GREEN_BD . "  - Identified Park:                      " . PS::BLUE_BD . $this->parkName . "\n"
-            . PS::GREEN_BD . "  - Name for Log:                         " . PS::BLUE_BD . $this->parkNameAbbr . "\n";
+        print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . $this->inputGSQ . ' '
+            . PS::CYAN_BD . $this->inputPotaId . ' ' . PS::GREEN_BD . $this->mode . ' ' . PS::MAGENTA_BD . $this->argCheckBand . "\n"
+            . PS::GREEN_BD . "  - Identified Park:  " . PS::CYAN_BD . $this->parkName . "\n"
+            . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->parkNameAbbr . "\n";
         $this->fileAdifPark =   "wsjtx_log_{$this->inputPotaId}.adi";
         $this->fileAdifWsjtx =  "wsjtx_log.adi";
 
@@ -684,7 +717,17 @@ class PS {
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
 
         if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeCheck) {
-            $this->processParkCheck();
+            $this->processParkCheck(false, true);
+            return;
+        }
+
+        if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeReview) {
+            $this->processParkCheck(true, true);
+            return;
+        }
+
+        if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeSummary) {
+            $this->processParkCheck(true, false);
             return;
         }
 
@@ -900,7 +943,7 @@ class PS {
             . PS::RESET;
     }
 
-    private function processParkCheck() {
+    private function processParkCheck($all = false, $showLogs = false) {
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
         $adif =     new adif($this->pathAdifLocal . $fileAdif);
@@ -908,7 +951,7 @@ class PS {
         $result =   $this->dataFix($data);
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
-        $date =     end($dates);
+        $date =     ($all ? null : end($dates));
         $band =     $this->argCheckBand;
         $logs =     $this->dataCountLogs($data, $date);
         $MGs =      $this->dataCountMissingGsq($data);
@@ -918,7 +961,7 @@ class PS {
             . " exists and contains " . PS::CYAN_BD . count($data) . PS::GREEN_BD . " entries.\n"
             . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
             . static::showStats($data, $date, $band)
-            . static::showLogs($data, $date, $band)
+            . ($showLogs ? static::showLogs($data, $date, $band) : "")
             . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
@@ -1263,13 +1306,14 @@ class PS {
 
     private function showHelp() {
         print PS::YELLOW_BD . "PURPOSE:" . PS::YELLOW ."\n"
-            . "  This program works with WSJT-X log files to prepare them for upload to POTA.\n"
-            . "  1) It sets all " . PS::GREEN_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values to your supplied Maidenhead GSQ value.\n"
-            . "  2) It adds a new " . PS::GREEN_BD ."MY_CITY" . PS::YELLOW ." column to all rows, populated with the Park Name in this format:\n"
+            . "  This program works with ". PS::YELLOW_BD . "WSJT-X" . PS::YELLOW . " log files to prepare them for upload to POTA.\n"
+            . "  1) It sets all " . PS::YELLOW_BD ."MY_GRIDSQUARE" . PS::YELLOW ." values to your supplied " . PS::CYAN_BD . "Maidenhead GSQ value" . PS::YELLOW .".\n"
+            . "  2) It adds a new " . PS::YELLOW_BD ."MY_CITY" . PS::YELLOW ." column to all rows, populated with the Park Name in this format:\n"
             . "     " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP" . PS::YELLOW . " - a POTA API lookup is used to obtain the park name.\n"
-            . "  3) It obtains missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values from the QRZ Callbook service.\n"
+            . "  3) It obtains missing " . PS::YELLOW_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::YELLOW_BD . "STATE" . PS::YELLOW ." and " . PS::YELLOW_BD ."COUNTRY" . PS::YELLOW . " values from the QRZ Callbook service.\n"
             . "  4) It archives or un-archives the park log file in question - see below for more details.\n"
-            . "  5) It can post a " . PS::GREEN_BD ."SPOT" . PS::YELLOW ." to POTA with a given frequency, mode and park ID to alert \"hunters\".\n"
+            . "  5) It can post a " . PS::GREEN_BD ."SPOT" . PS::YELLOW ." to POTA with a given frequency, mode and park ID to alert \"hunters\"\n"
+            . "     to the start or end of your activation session.\n"
             . "\n"
             . PS::YELLOW_BD . "CONFIGURATION:" . PS::YELLOW ."\n"
             . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n"
@@ -1288,7 +1332,7 @@ class PS {
             . "         potashell renames it to " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " so that logs can be added for this park.\n"
             . "       - " . PS::YELLOW_BD . "WSJT-X" . PS::YELLOW . " should be restarted if running, so the " . PS::BLUE_BD ."wsjtx_log.adi" . PS::YELLOW . " file can be read or created.\n"
             . "       - The user is then asked if they want to add a " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " for the park on the POTA website.\n"
-            . "         If user responds " . PS::RESPONSE_Y . ", potashell asks for " . PS::MAGENTA_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . " - usually mode, e.g. " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
+            . "         If user responds " . PS::RESPONSE_Y . ", potashell asks for " . PS::YELLOW_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . " - usually mode, e.g. " . PS::RED_BD . "FT8" . PS::YELLOW . "\n"
             . "\n" . PS::YELLOW_BD
             . "     c) WITH AN ACTIVE LOG FILE:\n" . PS::YELLOW
             . "       - If latest session has too few logs for POTA activation, a " . PS::RED_BD . "WARNING" . PS::YELLOW ." is given.\n"
@@ -1298,32 +1342,42 @@ class PS {
             . "         2. " . PS::YELLOW . "Any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n" . PS::YELLOW_BD
             . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all " . PS::GREEN_BD . "MY_GRIDSQUARE" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
             . "         4. " . PS::YELLOW . "The identified park - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP " . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
-            . "         5. " . PS::YELLOW . "The user is asked if they'd like to close their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
-            . "            " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", potashell prompts for the " . PS::MAGENTA_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . ", usually\n"
-            . "            starting with the code " . PS::RED_BD . "QRT" . PS::YELLOW . " indicating that the activation\n"
-            . "            attempt has ended - " . PS::RED_BD . "QRT - moving to CA-1369" . PS::YELLOW . " for example.\n"
+            . "         5. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
+            . "            " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", potashell prompts for the " . PS::YELLOW_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . ", usually\n"
+            . "            starting with the code " . PS::RED_BD . "QRT" . PS::YELLOW . " indicating that the activation attempt has ended -\n"
+            . "            for example: " . PS::RED_BD . "QRT - moving to CA-1369" . PS::YELLOW . "\n"
             . "\n" . PS::YELLOW_BD
             . "     d) THE \"CHECK\" MODE:\n" . PS::YELLOW
             . "       - If the " . PS::GREEN_BD . "CHECK" . PS::YELLOW . " argument is given, system operates directly on either\n"
             . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
+            . "       - A full list and summary for all logs in the latest session are shown, together with\n"
+            . "         distances for each contact in KM.\n"
             . "       - Missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n"
             . "       - No files are renamed.\n"
-            . "       - An optional " . PS::MAGENTA_BD . "band" . PS::YELLOW . " argument will limit stats to only contacts made on that band.\n"
+            . "       - An optional " . PS::YELLOW_BD . "band" . PS::YELLOW . " argument will limit stats to only contacts made on that band.\n"
             . "\n" . PS::YELLOW_BD
-            . "     d) THE \"PUSH\" MODE:\n" . PS::YELLOW
+            . "     e) THE \"REVIEW\" MODE:\n" . PS::YELLOW
+            . "       - If the " . PS::GREEN_BD . "REVIEW" . PS::YELLOW . " argument is given, system behaves exactly as in the CHECK mode,\n"
+            . "         but stats and logs for all sessions in the park are shown.\n"
+            . "\n" . PS::YELLOW_BD
+            . "     f) THE \"SUMMARY\" MODE:\n" . PS::YELLOW
+            . "       - If the " . PS::GREEN_BD . "SUMMARY" . PS::YELLOW . " argument is given, system behaves exactly as in the REVIEW mode,\n"
+            . "         but no logs are listed.\n"
+            . "\n" . PS::YELLOW_BD
+            . "     f) THE \"PUSH\" MODE:\n" . PS::YELLOW
             . "       - If the " . PS::GREEN_BD . "PUSH" . PS::YELLOW . " argument is given, system operates directly on either\n"
             . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
             . "       - The logs achieved so far in the latest session are uploaded to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW. ".\n"
             . "       - No files are renamed and you won't be prompted to add a spot to " . PS::YELLOW_BD . "pota.app" . PS::YELLOW. ".\n"
             . "\n" . PS::YELLOW_BD
-            . "     e) THE \"SPOT\" MODE:\n" . PS::YELLOW
+            . "     g) THE \"SPOT\" MODE:\n" . PS::YELLOW
             . "       - If the " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, a 'spot' is posted to the pota.app website.\n"
             . "       - The next parameter is the frequency in KHz.\n"
             . "       - The final parameter is the intended transmission mode or \"QRT\" to close the spot.\n"
             . "       - Use quotes around the last parameter to group words together.\n"
             . "       - To safely test this feature without users responding, use " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " as the park ID.\n"
-            . "         When the " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " test park is seen, the Activator callsign will be set to ABC123.\n"
-            . "         " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "K-TEST " . PS::CYAN_BD ."AA11BB22 " . PS::GREEN_BD . "SPOT "
+            . "         When the " . PS::BLUE_BD . "K-TEST" . PS::YELLOW . " test park is specified, the Activator callsign will be set to ABC123.\n"
+            . "           e.g: " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "K-TEST " . PS::YELLOW_BD ."AA11BB22 " . PS::GREEN_BD . "SPOT "
             . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "\"FT8 - Test for POTASHELL spotter mode\"\n" . PS::YELLOW
             . "\n" . PS::YELLOW_BD
             . $this->showSyntax(2)
@@ -1407,37 +1461,54 @@ class PS {
             . "\n";
     }
 
-    private static function showStats($data, $date, $band = null) {
+    private static function showStats($data, $date = null, $band = null) {
         $logs =         static::dataCountLogs($data, $date, $band);
+        $bands =        static::dataGetBands($data, $date, $band);
         $countries =    static::dataGetCountries($data, $date, $band);
         $dx =           static::dataGetBestDx($data, $date, $band);
         $states =       static::dataGetStates($data, $date, $band);
+        $lineLen =      120;
+        $indent =       20;
 
-        return
-              PS::GREEN_BD . "  - Stats for last session on " . PS::CYAN_BD
-            . substr($date, 0, 4) . "-"
-            . substr($date, 4, 2) . "-"
-            . substr($date, 6, 2)
-            . PS::GREEN_BD
+        $header = PS::GREEN_BD . "  - "
+            . ($date ?
+                "Stats for last session on " . PS::CYAN_BD
+                . substr($date, 0, 4) . "-" . substr($date, 4, 2) . "-" . substr($date, 6, 2)
+                . PS::GREEN_BD
+                :  "All time stats for park")
             . ($band ? " on " . PS::CYAN_BD . $band . PS::GREEN_BD : "")
-            . ":\n"
-            . "    There were " . PS::CYAN_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's')
+            . ":\n";
+
+        $stats = "    There were " . PS::CYAN_BD . $logs . PS::GREEN_BD . " distinct log" . ($logs === 1 ? '' : 's')
+            . " on " . PS::CYAN_BD . count($bands) . PS::GREEN_BD . " " . (count($bands) === 1 ? "band" : "bands")
             . " from " . PS::CYAN_BD . count($countries) . PS::GREEN_BD . " " . (count($countries) === 1 ? "country" : "countries")
             . (count($states) ? " and " . PS::CYAN_BD . count($states) . PS::GREEN_BD . " state" . (count($states) === 1 ? "" : "s") : "")
             . ($logs ? " - best DX was " . PS::BLUE_BD . number_format($dx) . PS::GREEN_BD . " KM." : "")
-            ."\n"
-            . (count($countries) ?
-                  "      - " . (count($countries) === 1 ? "Country:   " : "Countries: ")
-                . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
-                . (count($states) ? "      - "
-                . (count($states) === 1 ?
-                      "State:     ": "States:    ")
-                    . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $states) . PS::GREEN_BD . "\n"
-                    : ""
-                    )
-                  . "\n"
+            ."\n";
+
+        $bands =        PS::formatLineWrap($lineLen, $indent, $bands);
+        $countries =    PS::formatLineWrap($lineLen, $indent, $countries);
+        $states =       PS::formatLineWrap($lineLen, $indent, $states);
+
+        return
+              $header
+            . $stats
+            . (count($bands) ?
+                  "\n      - " . (count($bands) === 1 ?     "Band:       " : "Bands:      ")
+                  . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $bands) . PS::GREEN_BD . "\n"
                   : ""
-              );
+              )
+            . (count($countries) ?
+                  "\n      - " . (count($countries) === 1 ? "Country:   " : "Countries:  ")
+                . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
+                . (count($states) ?
+                      "\n      - " . (count($states) === 1 ? "State:      ": "States:     ")
+                    . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $states) . PS::GREEN_BD . "\n"
+                : ""
+                )
+                . "\n"
+                : ""
+            );
     }
 
     private function showSyntax($step = false) {
@@ -1448,9 +1519,13 @@ class PS {
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK\n"
-                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK " . PS::MAGENTA_BD . "160m\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "CHECK " . PS::YELLOW_BD . "160m\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "REVIEW\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "REVIEW " . PS::YELLOW_BD . "160m\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SUMMARY\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SUMMARY " . PS::YELLOW_BD . "160m\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "PUSH\n"
-                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::MAGENTA_BD . "14074 " . PS::RED_BD . "\"FT8 - QRP 4w\"\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::YELLOW_BD . "14074 " . PS::RED_BD . "\"FT8 - QRP 4w\"\n"
                     ;
             case 2:
                 return PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n";
