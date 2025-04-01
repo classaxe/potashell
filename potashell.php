@@ -417,7 +417,11 @@ class PS {
                 $tmp[$d['BAND']] ++;
             }
         }
-        ksort($tmp);
+        uksort($tmp, function ($a, $b) {
+            if ((int) $a > (int) $b) { return -1; }
+            if ((int) $a < (int) $b) { return 1; }
+            return 0;
+        });
         return $tmp;
     }
 
@@ -1493,15 +1497,15 @@ class PS {
               $header
             . $stats
             . (count($bands) ?
-                  "\n      - " . (count($bands) === 1 ?     "Band:       " : "Bands:      ")
+                  "\n      - " . (count($bands) === 1 ?     "Band: " : "Bands:") . "      "
                   . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $bands) . PS::GREEN_BD . "\n"
                   : ""
               )
             . (count($countries) ?
-                  "\n      - " . (count($countries) === 1 ? "Country:   " : "Countries:  ")
+                  "\n      - " . (count($countries) === 1 ? "Country: " : "Countries:") . "  "
                 . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
                 . (count($states) ?
-                      "\n      - " . (count($states) === 1 ? "State:      ": "States:     ")
+                      "\n      - " . (count($states) === 1 ? "State: ": "States:") . "     "
                     . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $states) . PS::GREEN_BD . "\n"
                 : ""
                 )
