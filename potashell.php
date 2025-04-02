@@ -31,7 +31,10 @@ class PS {
         'MY_GRIDSQUARE',
         'TX_PWR',
         'COMMENT',
-        'DX'
+        'DX',
+        'TO_CLUBLOG',
+        'TO_QRZ',
+        'TO_POTA',
     ];
     const MAXLEN = 120;
 
@@ -352,6 +355,7 @@ class PS {
             'STATE' => [ 'missing' => 0, 'fixed' => 0]
         ];
 
+        $flags = ['TO_CLUBLOG', 'TO_QRZ', 'TO_POTA'];
         foreach ($data as &$record) {
             if (empty($record)) {
                 continue;
@@ -384,6 +388,11 @@ class PS {
                 case 'United States':
                     $record['COUNTRY'] = 'USA';
                     break;
+            }
+            foreach ($flags as $flag) {
+                if (empty($record[$flag])) {
+                    $record[$flag] = '';
+                }
             }
             $record['MY_GRIDSQUARE'] =  $this->inputGSQ;
             $record['MY_CITY'] =        $this->parkNameAbbr;
@@ -890,18 +899,16 @@ class PS {
             print "    Operation cancelled.\n" . PS::RESET;
             return;
         }
-        rename(
-            $this->pathAdifLocal . $this->fileAdifWsjtx,
-            $this->pathAdifLocal . $this->fileAdifPark
-        );
+        $filename = $this->pathAdifLocal . $this->fileAdifPark;
+        rename($this->pathAdifLocal . $this->fileAdifWsjtx, $filename);
         $result =   $this->dataFix($data);
         $data =     $result['data'];
         $status =   $result['status'];
         $adif =     $adif->toAdif($data, $this->version, false, true);
-        file_put_contents($this->pathAdifLocal . $this->fileAdifPark, $adif);
+        file_put_contents($filename, $adif);
         $stats = false;
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->qrzUpload($data, $date);
+            $stats = $this->qrzUpload($data, $date, $filename);
         }
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
@@ -916,7 +923,7 @@ class PS {
                 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
             . ($stats ?
-                  "  - Uploaded " . $logs . " Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . ":\n"
+                  "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
                 . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
                 . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
                 . ($stats['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $stats['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
@@ -986,7 +993,8 @@ class PS {
     private function processParkPush() {
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdif = ($fileAdifParkExists ? $this->fileAdifPark : $this->fileAdifWsjtx);
-        $adif =     new adif($this->pathAdifLocal . $fileAdif);
+        $filename = $this->pathAdifLocal . $fileAdif;
+        $adif =     new adif($filename);
         $data =     $adif->parser();
         $result =   $this->dataFix($data);
         $data =     $result['data'];
@@ -995,14 +1003,14 @@ class PS {
         $logs =     $this->dataCountLogs($data, $date);
 
         $adif = $adif->toAdif($data, $this->version, false, true);
-        file_put_contents($this->pathAdifLocal . $fileAdif, $adif);
+        file_put_contents($filename, $adif);
         $stats = false;
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->qrzUpload($data, $date);
+            $stats = $this->qrzUpload($data, $date, $filename);
         }
         if ($stats) {
             print PS::GREEN_BD
-                . "  - Uploaded " . $logs . " Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . ":\n"
+                . "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
                 . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
                 . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
                 . ($stats['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $stats['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
@@ -1249,26 +1257,28 @@ class PS {
         return isset($data->Callsign->state) ? strtoupper((string) $data->Callsign->state) : null;
     }
 
-    private function qrzUpload($data, $date) {
-        $adifRecords = [];
-        foreach ($data as $record) {
-            if ($record['QSO_DATE'] !== (string) $date) {
-                continue;
-            }
-            $adifRecords[] = adif::toAdif([$record], $this->version, true, false);
-        }
+    private function qrzUpload($data, $date, $filename) {
         $stats = [
+            'ATTEMPTED' =>  0,
             'DUPLICATE' =>  0,
             'ERROR' =>      0,
             'INSERTED' =>   0,
             'WRONG_CALL' => 0
         ];
-        foreach ($adifRecords as $adifRecord) {
+        foreach ($data as &$record) {
+            if ($record['TO_QRZ'] === 'Y') {
+                continue;
+            }
+            if ($record['QSO_DATE'] !== (string) $date) {
+                continue;
+            }
+            $stats['ATTEMPTED']++;
+            $adif = adif::toAdif([$record], $this->version, true, false);
             try {
                 $url = sprintf(
                     "https://logbook.qrz.com/api?KEY=%s&ACTION=INSERT&ADIF=%s",
                     urlencode($this->qrzApiKey),
-                    urlencode($adifRecord)
+                    urlencode($adif)
                 );
                 $raw = file_get_contents($url);
             } catch (\Exception $e) {
@@ -1284,19 +1294,25 @@ class PS {
             switch ($status['RESULT']) {
                 case 'OK':
                     $stats['INSERTED']++;
+                    $record['TO_QRZ'] = 'Y';
                     break;
                 case 'FAIL':
                     if ($status['REASON'] === 'Unable to add QSO to database: duplicate') {
                         $stats['DUPLICATE']++;
+                        $record['TO_QRZ'] = 'Y';
                     } elseif (strpos($status['REASON'], 'wrong station_callsign for this logbook') !== false) {
                         $stats['WRONG_CALL']++;
+                        $record['TO_QRZ'] = 'Wrong Callsign';
                     } else {
                         print $status['REASON'] . "\n";
                         $stats['ERROR']++;
+                        $record['TO_QRZ'] = $status['REASON'];
                     }
                     break;
             }
         }
+        $adif =     adif::toAdif($data, $this->version, false, true);
+        file_put_contents($filename, $adif);
         return $stats;
     }
 
