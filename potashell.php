@@ -730,6 +730,8 @@ class PS {
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
 
+        PS::wsjtxUpdateInifile($this->qrzApiCallsign, $this->inputGSQ);
+
         if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeCheck) {
             $this->processParkCheck(false, true);
             return;
@@ -1334,6 +1336,9 @@ class PS {
             . "  4) It archives or un-archives the park log file in question - see below for more details.\n"
             . "  5) It can post a " . PS::GREEN_BD ."SPOT" . PS::YELLOW ." to POTA with a given frequency, mode and park ID to alert \"hunters\"\n"
             . "     to the start or end of your activation session.\n"
+            . "  6) It also updates values for " . PS::YELLOW_BD ."MyCall" . PS::YELLOW . " and " . PS::YELLOW_BD ."MyGrid" . PS::YELLOW
+            . " in your " . PS::BLUE_BD . "WSJT-X.ini" . PS::YELLOW . " file if they have changed,\n"
+            . "     so that the correct call and gridsquare are broadcast during your activations.\n"
             . "\n"
             . PS::YELLOW_BD . "CONFIGURATION:" . PS::YELLOW ."\n"
             . "  User Configuration is by means of the " . PS::BLUE_BD . "potashell.ini" . PS::YELLOW ." file located in this directory.\n"
@@ -1559,6 +1564,84 @@ class PS {
                     . $this->showSyntax(3) . "\n"
                     . $this->showSyntax(4) . PS::RESET;
         }
+    }
+
+    private function wsjtxUpdateInifile($call, $gsq) {
+        $filename = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR . 'WSJT-X.ini';
+        if (!$wsjtxIniConfig = PS::parse_ini($filename, true)) {
+            print PS::RED_BD . "ERROR:\n  Unable to parse {$filename} file.\n" . PS::RESET . "\n";
+            die(0);
+        };
+        if (!isset($wsjtxIniConfig['Configuration']['MyCall']) || !isset($wsjtxIniConfig['Configuration']['MyGrid'])) {
+            print PS::RED_BD . "ERROR:\n  Unable to read values for "
+                . PS::CYAN_BD . "MyCall" . PS::RED_BD . " and "
+                . PS::CYAN_BD . "MyGrid" . PS::RED_BD . " in "
+                . PS::CYAN_BD . "Configuration" . PS::RED_BD . " section of\n  "
+                . PS::BLUE_BD . $filename . "\n" . PS::RESET . "\n";
+            die(0);
+        };
+        $oldMyCall =    'MyCall=' . $wsjtxIniConfig['Configuration']['MyCall'];
+        $newMyCall =    'MyCall=' . $call;
+        $oldMyGrid =    'MyGrid=' . $wsjtxIniConfig['Configuration']['MyGrid'];
+        $newMyGrid =    'MyGrid=' . substr($gsq, 0, 6);
+
+        if ($oldMyCall === $newMyCall && $oldMyGrid === $newMyGrid) {
+            return;
+        }
+
+        $str = file_get_contents($filename);
+        $str = str_replace($oldMyCall, $newMyCall, $str);
+        $str = str_replace($oldMyGrid, $newMyGrid, $str);
+        file_put_contents($filename, $str);
+    }
+
+    private static function parse_ini ( $filepath ) {
+        // Thanks to goulven.ch AT gmail DOT com
+        // https://www.php.net/manual/en/function.parse-ini-file.php#78815
+        $ini = file($filepath);
+        if (count($ini) === 0) {
+            return [];
+        }
+        $sections = [];
+        $values =   [];
+        $globals =  [];
+        $i = 0;
+        foreach($ini as $line){
+            $line = trim($line);
+            // Comments
+            if ($line === '' || $line[0] === ';') {
+                continue;
+            }
+            // Sections
+            if ($line[0] === '[') {
+                $sections[] = substr($line, 1, -1);
+                $i++;
+                continue;
+            }
+            // Key-value pair
+            list($key, $value) = explode('=', $line, 2);
+            $key =      trim($key);
+            $value =    trim($value);
+            if ($i === 0) {
+                // Array values
+                if (substr($line, -1, 2) === '[]') {
+                    $globals[$key][] = $value;
+                } else {
+                    $globals[$key] = $value;
+                }
+            } else {
+                // Array values
+                if (substr( $line, -1, 2 ) === '[]') {
+                    $values[$i - 1][$key][] = $value;
+                } else {
+                    $values[$i - 1][$key] = $value;
+                }
+            }
+        }
+        for($j=0; $j<$i; $j++) {
+            $result[$sections[$j]] = $values[$j];
+        }
+        return $result + $globals;
     }
 }
 
