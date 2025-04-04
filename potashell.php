@@ -1523,7 +1523,7 @@ class PS {
                   : ""
               )
             . (count($countries) ?
-                  "\n      - " . (count($countries) === 1 ? "Country: " : "Countries:") . "  "
+                  "\n      - " . (count($countries) === 1 ? "Country:  " : "Countries:") . "  "
                 . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
                 . (count($states) ?
                       "\n      - " . (count($states) === 1 ? "State: ": "States:") . "     "
