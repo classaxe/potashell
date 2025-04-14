@@ -602,16 +602,17 @@ class PS {
         return $ordered;
     }
 
-    private static function formatLineWrap($maxLen, $indent, $data) {
+    private static function formatLineWrap($maxLen, $indent, $data, $qtyAlways = false) {
         $tmp = [];
         $lineLen = $indent;
         foreach ($data as $item => $count) {
-            $lineLen += strlen($item . ($count > 1 ? ' (' . $count . ')' : '') . ',');
+            $qty = ($qtyAlways || ($count > 1) ? ' (' . $count . ')' : '');
+            $lineLen += strlen($item . $qty . ',');
             if ($lineLen > $maxLen) {
-                $item = "\n" . str_repeat(' ', $indent) . $item . ($count > 1 ? PS::CYAN_BD . ' (' . $count . ')' : '');
+                $item = "\n" . str_repeat(' ', $indent) . $item . PS::CYAN_BD . $qty;
                 $lineLen = $indent;
             } else {
-                $item .= ($count > 1 ? PS::CYAN_BD . ' ('.$count . ')' : '');
+                $item .= PS::CYAN_BD . $qty;
             }
             $tmp[] = $item;
         }
@@ -701,6 +702,17 @@ class PS {
         $error = curl_error($ch);
         curl_close($ch);
         return $error ?: true;
+    }
+
+    private function potaSaveLogs($data, $filename) {
+        $export = [];
+        foreach ($data as $record) {
+            if ($record['TO_POTA'] === 'Y') {
+                continue;
+            }
+            $export[] = $record;
+        }
+        $adif = adif::toAdif($export, $this->version, false, true);
     }
 
     private function process() {
@@ -1510,7 +1522,7 @@ class PS {
             . ($logs ? " - best DX was " . PS::BLUE_BD . number_format($dx) . PS::GREEN_BD . " KM." : "")
             ."\n";
 
-        $bands =        PS::formatLineWrap(PS::MAXLEN, $indent, $bands);
+        $bands =        PS::formatLineWrap(PS::MAXLEN, $indent, $bands, true);
         $countries =    PS::formatLineWrap(PS::MAXLEN, $indent, $countries);
         $states =       PS::formatLineWrap(PS::MAXLEN, $indent, $states);
 
