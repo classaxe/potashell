@@ -96,6 +96,7 @@ class PS {
     private $modeCheck;
     private $modeHelp;
     private $modePush;
+    private $modePushAll;
     private $modeReview;
     private $modeSpot;
     private $modeSummary;
@@ -151,6 +152,7 @@ class PS {
         $this->modeCheck = false;
         $this->modeHelp = false;
         $this->modePush = false;
+        $this->modePushAll = false;
         $this->modeReview = false;
         $this->modeSpot = false;
         $this->modeSummary = false;
@@ -181,6 +183,9 @@ class PS {
         if ($this->modeSpot) {
             $this->spotKhz = $arg4;
             $this->spotComment = $arg5;
+        }
+        if ($this->modePush) {
+            $this->modePushAll = $arg4 && strtoupper($arg4) === 'ALL';
         }
     }
 
@@ -735,7 +740,9 @@ class PS {
         $this->parkName =       $lookup['name'];
         $this->parkNameAbbr =   $lookup['abbr'];
         print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . $this->inputGSQ . ' '
-            . PS::CYAN_BD . $this->inputPotaId . ' ' . PS::GREEN_BD . $this->mode . ' ' . PS::MAGENTA_BD . $this->argCheckBand . "\n"
+            . PS::CYAN_BD . $this->inputPotaId . ' ' . PS::GREEN_BD . strtoupper($this->mode) . ' '
+            . ($this->modePushAll ? "ALL" : '')
+            . PS::MAGENTA_BD . $this->argCheckBand . "\n"
             . PS::GREEN_BD . "  - Identified Park:  " . PS::CYAN_BD . $this->parkName . "\n"
             . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->parkNameAbbr . "\n";
         $this->fileAdifPark =   "wsjtx_log_{$this->inputPotaId}.adi";
@@ -1015,8 +1022,7 @@ class PS {
         $result =   $this->dataFix($data);
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
-        $date =     end($dates);
-        $logs =     $this->dataCountLogs($data, $date);
+        $date =     ($this->modePushAll ? false : end($dates));
 
         $adif = $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
@@ -1285,7 +1291,7 @@ class PS {
             if ($record['TO_QRZ'] === 'Y') {
                 continue;
             }
-            if ($record['QSO_DATE'] !== (string) $date) {
+            if ($date && ($record['QSO_DATE'] !== (string) $date)) {
                 continue;
             }
             $stats['ATTEMPTED']++;
@@ -1407,8 +1413,12 @@ class PS {
             . "     f) THE \"PUSH\" MODE:\n" . PS::YELLOW
             . "       - If the " . PS::GREEN_BD . "PUSH" . PS::YELLOW . " argument is given, system operates directly on either\n"
             . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
-            . "       - The logs achieved so far in the latest session are uploaded to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW. ".\n"
+            . "       - The logs achieved so far in the latest session are uploaded to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW . ".\n"
+            . "       - The logs that were pushed to QRZ have the TO_QRZ flag set to 'Y' to indicate these\n"
+            . "         have been uploaded.\n"
             . "       - No files are renamed and you won't be prompted to add a spot to " . PS::YELLOW_BD . "pota.app" . PS::YELLOW. ".\n"
+            . "       - If the optional " . PS::GREEN_BD . "ALL" . PS::YELLOW . " argument is given, all logs at the park which are not indicated\n"
+            . "         as having been already pushed will be sent to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW . "\n"
             . "\n" . PS::YELLOW_BD
             . "     g) THE \"SPOT\" MODE:\n" . PS::YELLOW
             . "       - If the " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " argument is given, a 'spot' is posted to the pota.app website.\n"
@@ -1572,6 +1582,7 @@ class PS {
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SUMMARY\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SUMMARY " . PS::YELLOW_BD . "160m\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "PUSH\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "PUSH ALL\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::YELLOW_BD . "14074 " . PS::RED_BD . "\"FT8 - QRP 4w\"\n"
                     ;
             case 2:
@@ -1848,7 +1859,7 @@ function d($var) {
 }
 
 function dd($var) {
-    d($var);
+    var_dump($var);
     exit;
 }
 
