@@ -104,6 +104,7 @@ class PS {
     private $parkName;
     private $parkNameAbbr;
     private $pathAdifLocal;
+    private $php;
     private $qrzApiKey;
     private $qrzApiCallsign;
     private $qrzPass;
@@ -116,6 +117,7 @@ class PS {
     public function __construct() {
         $this->argsGetCli();
         $this->version = exec('git describe --tags');
+        $this->php = phpversion();
         $this->getHTTPContext();
         $this->phpCheck();
         $this->argsLoadIni();
@@ -1331,11 +1333,12 @@ class PS {
     }
 
     private function showHeader() {
-        $name = 'POTA SHELL ' . $this->version;
+        $name = 'POTA SHELL  ' . $this->version;
         print PS::CLS . PS::YELLOW
             . str_repeat('*', strlen($name) + 4) . "\n"
-            . '* ' . PS::YELLOW_BD . 'POTA SHELL ' . $this->version . PS::YELLOW . " *\n"
-            . str_repeat('*', strlen($name) + 4) . "\n";
+            . '* ' . PS::YELLOW_BD . 'POTA SHELL  ' . PS::GREEN_BD . $this->version . PS::YELLOW . " *\n"
+            . '* ' . PS::YELLOW_BD . 'PHP         ' . PS::GREEN_BD . str_pad($this->php, strlen($this->version), ' ', STR_PAD_LEFT) . PS::YELLOW . " *\n"
+            . str_repeat('*', strlen($name) + 4) . "\n\n";
     }
 
     private function showHelp() {
@@ -1435,7 +1438,7 @@ class PS {
             return "";
         }
         $columns =      [
-            ['label' => '#',        'src' => '',                 'len' => 3],
+            ['label' => '#',        'src' => false,              'len' => 3],
             ['label' => 'DATE',     'src' => 'QSO_DATE',         'len' => 4],
             ['label' => 'UTC',      'src' => 'TIME_ON',          'len' => 3],
             ['label' => 'YOU',      'src' => 'STATION_CALLSIGN', 'len' => 3],
@@ -1448,6 +1451,7 @@ class PS {
             ['label' => 'COUNTRY',  'src' => 'COUNTRY',          'len' => 7],
             ['label' => 'GSQ',      'src' => 'GRIDSQUARE',       'len' => 3],
             ['label' => 'KM',       'src' => 'DX',               'len' => 3],
+            ['label' => 'UPLOAD',   'src' => '_',                'len' => 6],
         ];
         foreach ($logs as $log) {
             foreach ($columns as &$column) {
@@ -1462,7 +1466,7 @@ class PS {
         $header = [$num];
         $header_bd = [PS::CYAN_BD . $num . PS::GREEN];
         foreach ($columns as &$column) {
-            if ($column['src'] === '') {
+            if ($column['src'] === false) {
                 continue;
             }
             $header[] = str_pad($column['label'], $column['len']);
@@ -1474,10 +1478,17 @@ class PS {
         foreach ($logs as $i => $log) {
             $row = [PS::YELLOW_BD . str_pad('' . (1 + $i), $columns[0]['len'], ' ', STR_PAD_LEFT) . PS::GREEN];
             foreach ($columns as &$column) {
-                if ($column['src'] === '') {
+                if ($column['src'] === false) {
                     continue;
                 }
                 switch($column['src']) {
+                    case '_':
+                        $row[] = PS::CYAN
+                            . (isset($log['TO_CLUBLOG']) ? ($log['TO_CLUBLOG'] === 'Y' ? 'C' : ' ') : ' ') . ' '
+                            . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'P' : ' ') : ' ') . ' '
+                            . (isset($log['TO_QRZ']) ?     ($log['TO_QRZ'] === 'Y' ?     'Q' : ' ') : ' ') . ' '
+                            . PS::GREEN;
+                        break;
                     case 'DX':
                         $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len'], " ", STR_PAD_LEFT) . PS::GREEN;
                         break;
