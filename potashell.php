@@ -87,7 +87,6 @@ class PS {
 
     private $fileAdifPark;
     private $fileAdifWsjtx;
-    private $hasClublog = false;
     private $hasInternet = false;
     private $inputGSQ;
     private $inputPotaId;
@@ -324,15 +323,18 @@ class PS {
     }
 
     private function clublogCheck() {
-        if (!$this->clublogCallsign) {
+        if (empty($this->clublogCallsign) || empty($this->clublogEmail) || empty($this->clublogPassword)) {
             return false;
         }
         if (!$this->hasInternet) {
             return false;
         }
         $url = sprintf(
-            "https://logs.classaxe.com/potashell/clublog/apikey?callsign=%s",
-            urlencode($this->clublogCallsign)
+            "https://logs.classaxe.com/potashell/clublog/apikey"
+            . "?CALL=%s&POTASHELL=%s&PHP=%s",
+            urlencode($this->clublogCallsign),
+            urlencode($this->version),
+            urlencode($this->php)
         );
         $this->clublogApikey = file_get_contents($url, false, $this->HTTPcontext);
         return true;
@@ -931,7 +933,7 @@ class PS {
         file_put_contents($filename, $adif);
         $stats = false;
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->qrzUpload($data, $date, $filename);
+            $stats = $this->qrzUpload($data, $filename, $date);
         }
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
@@ -1028,7 +1030,10 @@ class PS {
         file_put_contents($filename, $adif);
         $stats = false;
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->qrzUpload($data, $date, $filename);
+            $stats = $this->qrzUpload($data, $filename, $date);
+        }
+        if ($this->clublogEmail && $this->clublogCallsign && $this->clublogPassword) {
+            $stats = $this->clublogUpload($data, $filename, $date);
         }
         if ($stats) {
             print PS::GREEN_BD
@@ -1153,9 +1158,6 @@ class PS {
     }
 
     private function qrzCheck() {
-        if (!$this->hasInternet) {
-            return;
-        }
         if (empty($this->qrzLogin) || empty($this->qrzPass)) {
             print
                 PS::RED_BD . "WARNING:\n"
@@ -1163,7 +1165,10 @@ class PS {
                 . "  Missing GSQ values for logged contacts cannot be fixed without\n"
                 . "  valid QRZ credentials.\n"
                 . PS::RESET;
-            return;
+            return false;
+        }
+        if (!$this->hasInternet) {
+            return false;
         }
         $url = sprintf(
             "https://xmldata.qrz.com/xml/current/?username=%s;password=%s;agent=%s",
@@ -1181,23 +1186,22 @@ class PS {
                 . "  valid QRZ credentials.\n"
                 . PS::RESET;
             die(0);
-            return;
         }
         if (empty($data->Session->Key)) {
             print
                 PS::RED_BD . "ERROR:\n  QRZ.com reports an invalid session key, so automatic log uploads are possible at this time.\n\n" . PS::RESET
                 . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n"
                 . PS::RESET;
-        } else {
-            $this->qrzSession = $data->Session->Key;
+            return false;
         }
+        $this->qrzSession = $data->Session->Key;
         if (empty($this->qrzApiKey)) {
             print
                 PS::RED_BD . "WARNING:\n"
                 . "  QRZ.com " . PS::BLUE_BD . "[QRZ]apikey" . PS::RED_BD . " is missing in " . PS::BLUE_BD ."potashell.ini" . PS::RED_BD  .".\n"
                 . "  Without a valid XML Subscriber apikey, you won't be able to automatically upload\n"
                 . "  archived logs to QRZ.com.\n\n" . PS::RESET;
-            return;
+            return false;
         }
         try {
             $url = sprintf(
@@ -1221,7 +1225,7 @@ class PS {
                     . PS::BLUE_BD . "  - Wrong callsign for [QRZ]apikey\n" . PS::RESET;
                 die(0);
             }
-            return;
+            return true;
         }
 
         if (isset($status['REASON'])) {
@@ -1236,6 +1240,7 @@ class PS {
                 die(0);
             }
         }
+        return false;
     }
 
     private function qrzGetInfoForCall($callsign) {
@@ -1279,7 +1284,7 @@ class PS {
         return isset($data->Callsign->state) ? strtoupper((string) $data->Callsign->state) : null;
     }
 
-    private function qrzUpload($data, $date, $filename) {
+    private function qrzUpload($data, $filename, $date = false) {
         $stats = [
             'ATTEMPTED' =>  0,
             'DUPLICATE' =>  0,

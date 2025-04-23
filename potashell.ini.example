@@ -8,6 +8,28 @@
 ; This is a sample configuration file for potashell
 ; Copy this file to potashell.ini, and modify it to suit your own needs
 
+
+[CLUBLOG]
+; Clublog.com registered users can put their login and password below
+; for automatic uploads to Clublog at the end of each session.
+; Uncomment these lines and set your own values to use this feature
+; clublog_email = "me@example.com"
+; clublog_password = "password"
+; clublog_callsign = "A12BCD"
+
+
+[QRZ]
+; QRZ.com XML Data subscribers can put their login and password below
+; for automatic lookups for any missing gridsquares seen in POTA Logfiles:
+login = "A12BCD"
+password = "S3cret"
+
+; QRZ.com XML Data subscribers may have several logbooks, each with a callsign and API key.
+; Provide your QRZ Logbook operating callsign and API Key for automatic uploads
+apicallsign = "A12BCD"
+apikey = "ABCD-1234-ABCD-1234"
+
+
 [WSJTX]
 ; Set this to the directory where your WSJT-X datafiles are stored
 ; Run WSJT-X and choose 'Open log directory' from the File menu to see
@@ -20,22 +42,3 @@
 ; log_directory = "/Users/Username/Library/Application Support/WSJT-X"
 ;
 log_directory = "C:\Users\Username\AppData\Local\WSJT-X"
-
-[CLUBLOG]
-; Clublog.com registered users can put their login and password below
-; for automatic uploads to Clublog at the end of each session.
-; Uncomment these lines and set your own values to use this feature
-; clublog_email = "me@example.com"
-; clublog_password = "password"
-; clublog_callsign = "A12BCD"
-
-[QRZ]
-; QRZ.com XML Data subscribers can put their login and password below
-; for automatic lookups for any missing gridsquares seen in POTA Logfiles:
-login = "A12BCD"
-password = "S3cret"
-
-; QRZ.com XML Data subscribers may have several logbooks, each with a callsign and API key.
-; Provide your QRZ Logbook operating callsign and API Key for automatic uploads
-apicallsign = "A12BCD"
-apikey = "ABCD-1234-ABCD-1234"
