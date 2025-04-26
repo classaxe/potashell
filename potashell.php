@@ -170,12 +170,12 @@ class PS {
         }
         $this->inputPotaId =    $arg1;
         $this->inputGSQ =       $arg2;
-        $this->mode =           $arg3;
-        $this->modeCheck =      $this->mode && strtoupper($this->mode) === 'CHECK';
-        $this->modePush =       $this->mode && strtoupper($this->mode) === 'PUSH';
-        $this->modeReview =     $this->mode && strtoupper($this->mode) === 'REVIEW';
-        $this->modeSpot =       $this->mode && strtoupper($this->mode) === 'SPOT';
-        $this->modeSummary =    $this->mode && strtoupper($this->mode) === 'SUMMARY';
+        $this->mode =           $arg3 ? strtoupper($arg3) : '';
+        $this->modeCheck =      $this->mode && $this->mode === 'CHECK';
+        $this->modePush =       $this->mode && $this->mode === 'PUSH';
+        $this->modeReview =     $this->mode && $this->mode === 'REVIEW';
+        $this->modeSpot =       $this->mode && $this->mode === 'SPOT';
+        $this->modeSummary =    $this->mode && $this->mode === 'SUMMARY';
         if ($this->modeCheck || $this->modeReview || $this->modeSummary) {
             $this->argCheckBand = $arg4;
         }
@@ -338,6 +338,69 @@ class PS {
         );
         $this->clublogApikey = file_get_contents($url, false, $this->HTTPcontext);
         return true;
+    }
+
+    private function clublogUpload(&$data, $date = false) {
+        $stats = [
+            'ATTEMPTED' =>  0,
+            'UPDATED' =>    0,
+            'DUPLICATE' =>  0,
+            'ERROR' =>      0,
+            'INSERTED' =>   0,
+            'WRONG_CALL' => 0
+        ];
+        foreach ($data as &$record) {
+            if (isset($record['TO_CLUBLOG']) && $record['TO_CLUBLOG'] === 'Y') {
+                continue;
+            }
+            if ($date && isset($record['QSO_DATE']) && ($record['QSO_DATE'] !== (string) $date)) {
+                continue;
+            }
+            $stats['ATTEMPTED']++;
+            $adif = adif::toAdif([$record], $this->version, true, false);
+            try {
+                $url = "https://clublog.org/realtime.php";
+                // $url = "https://logs.classaxe.com/custom/endpoint.php";
+                $args = [
+                    'email' =>      ($this->clublogEmail),
+                    'password' =>   ($this->clublogPassword),
+                    'callsign' =>   ($this->clublogCallsign),
+                    'api' =>        ($this->clublogApikey),
+                    'adif' =>       ($adif)
+                ];
+                $curl = curl_init($url);
+                curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, false); // For HTTPS
+                curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, false); // For HTTPS
+                curl_setopt($curl, CURLOPT_URL, $url);
+                curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($curl, CURLOPT_POST, true);
+                curl_setopt($curl, CURLOPT_POSTFIELDS, $args);
+                $result = curl_exec($curl);
+                curl_close($curl);
+            } catch (\Exception $e) {
+                print PS::RED_BD . "WARNING:\n  Unable to connect to Clublog.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
+                die(0);
+            }
+            switch ($result) {
+                case "Dupe":
+                    $stats['DUPLICATE']++;
+                    $record['TO_CLUBLOG'] = 'Y';
+                    break;
+                case "OK":
+                    $stats['INSERTED']++;
+                    $record['TO_CLUBLOG'] = 'Y';
+                    break;
+                case "Updated QSO":
+                    $stats['UPDATED']++;
+                    $record['TO_CLUBLOG'] = 'Y';
+                    break;
+                default:
+                    //d($record);
+                    d("RESULT WAS" . $result);
+                    break;
+            }
+        }
+        return $stats;
     }
 
     private static function dataCountActivations($data) {
@@ -931,9 +994,13 @@ class PS {
         $status =   $result['status'];
         $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        $stats = false;
+        $statsClublog = false;
+        $statsQrz = false;
+        if ($this->clublogCheck()) {
+            $statsClublog = $this->clublogUpload($data, $date);
+        }
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->qrzUpload($data, $filename, $date);
+            $statsQrz = $this->qrzUpload($data, $date);
         }
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
@@ -947,12 +1014,12 @@ class PS {
                 )
                 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
-            . ($stats ?
-                  "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
-                . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
-                . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
-                . ($stats['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $stats['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
-                . ($stats['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $stats['ERROR'] . "\n" . PS::GREEN_BD : "")
+            . ($statsQrz ?
+                  "  - Uploaded " . $statsQrz['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
+                . ($statsQrz['INSERTED'] ?                  "     * Inserted:       " . $statsQrz['INSERTED'] . "\n" : "")
+                . ($statsQrz['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $statsQrz['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
+                . ($statsQrz['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $statsQrz['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
+                . ($statsQrz['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $statsQrz['ERROR'] . "\n" . PS::GREEN_BD : "")
               : ""
             )
             . "\n";
@@ -1028,23 +1095,38 @@ class PS {
 
         $adif = $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        $stats = false;
+        $statsClublog = false;
+        $statsQrz = false;
+        if ($this->clublogCheck()) {
+            $statsClublog = $this->clublogUpload($data, $date);
+        }
+//        dd($data);
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $stats = $this->qrzUpload($data, $filename, $date);
+            $statsQrz = $this->qrzUpload($data, $date);
         }
-        if ($this->clublogEmail && $this->clublogCallsign && $this->clublogPassword) {
-            $stats = $this->clublogUpload($data, $filename, $date);
-        }
-        if ($stats) {
+        $adif =     adif::toAdif($data, $this->version, false, true);
+
+        //dd($adif);
+        file_put_contents($filename, $adif);
+
+        if ($statsClublog) {
             print PS::GREEN_BD
-                . "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
-                . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
-                . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
-                . ($stats['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $stats['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
-                . ($stats['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $stats['ERROR'] . "\n" . PS::GREEN_BD : "")
-                . "\n"
-                . PS::RESET;
+                . "  - Uploaded " . $statsClublog['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "ClubLog.com" . PS::GREEN_BD . "\n"
+                . ($statsClublog['INSERTED'] ?                  "     * Inserted:       " . $statsClublog['INSERTED'] . "\n" : "")
+                . ($statsClublog['UPDATED'] ?                   "     * Updated:        " . $statsClublog['UPDATED'] . "\n" : "")
+                . ($statsClublog['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $statsClublog['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
+                . ($statsClublog['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $statsClublog['ERROR'] . "\n" . PS::GREEN_BD : "");
         }
+        if ($statsQrz) {
+            print PS::GREEN_BD
+                . "  - Uploaded " . $statsQrz['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
+                . ($statsQrz['INSERTED'] ?                  "     * Inserted:       " . $statsQrz['INSERTED'] . "\n" : "")
+                . ($statsQrz['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $statsQrz['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
+                . ($statsQrz['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $statsQrz['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
+                . ($statsQrz['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $statsQrz['ERROR'] . "\n" . PS::GREEN_BD : "");
+        }
+        print "\n" . PS::RESET;
+
     }
 
     private function processParkSpot() {
@@ -1284,7 +1366,7 @@ class PS {
         return isset($data->Callsign->state) ? strtoupper((string) $data->Callsign->state) : null;
     }
 
-    private function qrzUpload($data, $filename, $date = false) {
+    private function qrzUpload(&$data, $date = false) {
         $stats = [
             'ATTEMPTED' =>  0,
             'DUPLICATE' =>  0,
@@ -1338,8 +1420,6 @@ class PS {
                     break;
             }
         }
-        $adif =     adif::toAdif($data, $this->version, false, true);
-        file_put_contents($filename, $adif);
         return $stats;
     }
 
