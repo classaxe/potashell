@@ -346,8 +346,7 @@ class PS {
             'UPDATED' =>    0,
             'DUPLICATE' =>  0,
             'ERROR' =>      0,
-            'INSERTED' =>   0,
-            'WRONG_CALL' => 0
+            'INSERTED' =>   0
         ];
         foreach ($data as &$record) {
             if (isset($record['TO_CLUBLOG']) && $record['TO_CLUBLOG'] === 'Y') {
@@ -395,12 +394,18 @@ class PS {
                     $record['TO_CLUBLOG'] = 'Y';
                     break;
                 default:
-                    //d($record);
+                    $stats['ERROR']++;
                     d("RESULT WAS" . $result);
                     break;
             }
         }
-        return $stats;
+        return
+            PS::GREEN_BD
+            . "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "ClubLog.com" . PS::GREEN_BD . "\n"
+            . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
+            . ($stats['UPDATED'] ?                   "     * Updated:        " . $stats['UPDATED'] . "\n" : "")
+            . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
+            . ($stats['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $stats['ERROR'] . "\n" . PS::GREEN_BD : "");
     }
 
     private static function dataCountActivations($data) {
@@ -994,13 +999,13 @@ class PS {
         $status =   $result['status'];
         $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        $statsClublog = false;
-        $statsQrz = false;
+        $resultClublog = '';
+        $resultQrz = '';
         if ($this->clublogCheck()) {
-            $statsClublog = $this->clublogUpload($data, $date);
+            $resultClublog = $this->clublogUpload($data, $date);
         }
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $statsQrz = $this->qrzUpload($data, $date);
+            $resultQrz = $this->qrzUpload($data, $date);
         }
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
@@ -1014,20 +1019,15 @@ class PS {
                 )
                 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
-            . ($statsQrz ?
-                  "  - Uploaded " . $statsQrz['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
-                . ($statsQrz['INSERTED'] ?                  "     * Inserted:       " . $statsQrz['INSERTED'] . "\n" : "")
-                . ($statsQrz['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $statsQrz['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
-                . ($statsQrz['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $statsQrz['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
-                . ($statsQrz['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $statsQrz['ERROR'] . "\n" . PS::GREEN_BD : "")
-              : ""
-            )
-            . "\n";
+            . $resultClublog
+            . $resultQrz
+            . "\n"
+            . PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
+            . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
 
-        print PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
-        . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
         $fin = fopen("php://stdin","r");
         $response = strToUpper(trim(fgets($fin)));
+
         if ($response === 'Y') {
             print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
             $this->spotKhz = trim(fgets($fin));
@@ -1095,38 +1095,17 @@ class PS {
 
         $adif = $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        $statsClublog = false;
-        $statsQrz = false;
+        $resultClublog = '';
+        $resultQrz = '';
         if ($this->clublogCheck()) {
-            $statsClublog = $this->clublogUpload($data, $date);
+            $resultClublog = $this->clublogUpload($data, $date);
         }
-//        dd($data);
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $statsQrz = $this->qrzUpload($data, $date);
+            $resultQrz = $this->qrzUpload($data, $date);
         }
-        $adif =     adif::toAdif($data, $this->version, false, true);
-
-        //dd($adif);
+        $adif = adif::toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-
-        if ($statsClublog) {
-            print PS::GREEN_BD
-                . "  - Uploaded " . $statsClublog['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "ClubLog.com" . PS::GREEN_BD . "\n"
-                . ($statsClublog['INSERTED'] ?                  "     * Inserted:       " . $statsClublog['INSERTED'] . "\n" : "")
-                . ($statsClublog['UPDATED'] ?                   "     * Updated:        " . $statsClublog['UPDATED'] . "\n" : "")
-                . ($statsClublog['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $statsClublog['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
-                . ($statsClublog['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $statsClublog['ERROR'] . "\n" . PS::GREEN_BD : "");
-        }
-        if ($statsQrz) {
-            print PS::GREEN_BD
-                . "  - Uploaded " . $statsQrz['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
-                . ($statsQrz['INSERTED'] ?                  "     * Inserted:       " . $statsQrz['INSERTED'] . "\n" : "")
-                . ($statsQrz['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $statsQrz['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
-                . ($statsQrz['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $statsQrz['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
-                . ($statsQrz['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $statsQrz['ERROR'] . "\n" . PS::GREEN_BD : "");
-        }
-        print "\n" . PS::RESET;
-
+        print $resultClublog . $resultQrz . "\n" . PS::RESET;
     }
 
     private function processParkSpot() {
@@ -1420,7 +1399,12 @@ class PS {
                     break;
             }
         }
-        return $stats;
+        return PS::GREEN_BD
+            . "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
+            . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
+            . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
+            . ($stats['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $stats['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
+            . ($stats['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $stats['ERROR'] . "\n" . PS::GREEN_BD : "");
     }
 
     private function showHeader() {
@@ -1473,7 +1457,9 @@ class PS {
             . "         2. " . PS::YELLOW . "Any missing " . PS::GREEN_BD . "GRIDSQUARE" . PS::YELLOW . ", "  . PS::GREEN_BD . "STATE" . PS::YELLOW ." and " . PS::GREEN_BD ."COUNTRY" . PS::YELLOW . " values for the other party are added.\n" . PS::YELLOW_BD
             . "         3. " . PS::YELLOW . "The supplied gridsquare - e.g. " . PS::CYAN_BD ."FN03FV82" . PS::YELLOW . " is written to all " . PS::GREEN_BD . "MY_GRIDSQUARE" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
             . "         4. " . PS::YELLOW . "The identified park - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP " . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
-            . "         5. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
+            . "         5. " . PS::YELLOW . "If you have an internet connection, logs in the current session are sent to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW . ",\n"
+            . "            and if your potashell.ini file contains ClubLog credentials, to " . PS::YELLOW_BD . "ClubLog.com" . PS::YELLOW . " also.\n" . PS::YELLOW_BD
+            . "         6. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
             . "            " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", potashell prompts for the " . PS::YELLOW_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . ", usually\n"
             . "            starting with the code " . PS::RED_BD . "QRT" . PS::YELLOW . " indicating that the activation attempt has ended -\n"
             . "            for example: " . PS::RED_BD . "QRT - moving to CA-1369" . PS::YELLOW . "\n"
@@ -1499,7 +1485,10 @@ class PS {
             . "       - If the " . PS::GREEN_BD . "PUSH" . PS::YELLOW . " argument is given, system operates directly on either\n"
             . "         the Park Log file, or if that is absent, the " . PS::BLUE_BD . "wsjtx_log.adi" . PS::YELLOW ." file currently in use.\n"
             . "       - The logs achieved so far in the latest session are uploaded to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW . ".\n"
-            . "       - The logs that were pushed to QRZ have the TO_QRZ flag set to 'Y' to indicate these\n"
+            . "         Any logs sent to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW . " have the " . PS::BLUE_BD . "TO_QRZ" . PS::YELLOW ." flag set to 'Y' to indicate these\n"
+            . "         have been uploaded.\n"
+            . "       - If potashell.ini file contains your Clublog credentials, logs will also go to " . PS::YELLOW_BD . "ClubLog.com" . PS::YELLOW . ".\n"
+            . "         Any logs sent to " . PS::YELLOW_BD . "ClubLog.com" . PS::YELLOW . " have the " . PS::BLUE_BD . "TO_CLUBLOG" . PS::YELLOW ." flag set to 'Y' to indicate these\n"
             . "         have been uploaded.\n"
             . "       - No files are renamed and you won't be prompted to add a spot to " . PS::YELLOW_BD . "pota.app" . PS::YELLOW. ".\n"
             . "       - If the optional " . PS::GREEN_BD . "ALL" . PS::YELLOW . " argument is given, all logs at the park which are not indicated\n"
