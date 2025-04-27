@@ -95,7 +95,7 @@ class PS {
     private $modeCheck;
     private $modeHelp;
     private $modePush;
-    private $modePushAll;
+    private $modePushQty;
     private $modeReview;
     private $modeSpot;
     private $modeSummary;
@@ -151,7 +151,7 @@ class PS {
         $this->modeCheck = false;
         $this->modeHelp = false;
         $this->modePush = false;
-        $this->modePushAll = false;
+        $this->modePushQty = false;
         $this->modeReview = false;
         $this->modeSpot = false;
         $this->modeSummary = false;
@@ -184,7 +184,7 @@ class PS {
             $this->spotComment = $arg5;
         }
         if ($this->modePush) {
-            $this->modePushAll = $arg4 && strtoupper($arg4) === 'ALL';
+            $this->modePushQty = $arg4;
         }
     }
 
@@ -348,11 +348,15 @@ class PS {
             'ERROR' =>      0,
             'INSERTED' =>   0
         ];
+        $processed = 0;
         foreach ($data as &$record) {
             if (isset($record['TO_CLUBLOG']) && $record['TO_CLUBLOG'] === 'Y') {
                 continue;
             }
             if ($date && isset($record['QSO_DATE']) && ($record['QSO_DATE'] !== (string) $date)) {
+                continue;
+            }
+            if ($this->modePushQty && is_int($this->modePushQty) && $processed > $this->modePushQty) {
                 continue;
             }
             $stats['ATTEMPTED']++;
@@ -398,6 +402,7 @@ class PS {
                     d("RESULT WAS" . $result);
                     break;
             }
+            $processed++;
         }
         return
             PS::GREEN_BD
@@ -810,8 +815,7 @@ class PS {
         $this->parkName =       $lookup['name'];
         $this->parkNameAbbr =   $lookup['abbr'];
         print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . $this->inputGSQ . ' '
-            . PS::CYAN_BD . $this->inputPotaId . ' ' . PS::GREEN_BD . strtoupper($this->mode) . ' '
-            . ($this->modePushAll ? "ALL" : '')
+            . PS::CYAN_BD . $this->inputPotaId . ' ' . PS::GREEN_BD . strtoupper($this->mode) . ' ' . $this->modePushQty
             . PS::MAGENTA_BD . $this->argCheckBand . "\n"
             . PS::GREEN_BD . "  - Identified Park:  " . PS::CYAN_BD . $this->parkName . "\n"
             . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->parkNameAbbr . "\n";
@@ -1091,7 +1095,7 @@ class PS {
         $result =   $this->dataFix($data);
         $data =     $result['data'];
         $dates =    $this->dataGetDates($data);
-        $date =     ($this->modePushAll ? false : end($dates));
+        $date =     ($this->modePushQty ? false : end($dates));
 
         $adif = $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
@@ -1353,11 +1357,15 @@ class PS {
             'INSERTED' =>   0,
             'WRONG_CALL' => 0
         ];
+        $processed = 0;
         foreach ($data as &$record) {
             if ($record['TO_QRZ'] === 'Y') {
                 continue;
             }
             if ($date && ($record['QSO_DATE'] !== (string) $date)) {
+                continue;
+            }
+            if ($this->modePushQty && is_int($this->modePushQty) && $processed > $this->modePushQty) {
                 continue;
             }
             $stats['ATTEMPTED']++;
@@ -1398,6 +1406,7 @@ class PS {
                     }
                     break;
             }
+            $processed++;
         }
         return PS::GREEN_BD
             . "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
@@ -1491,6 +1500,9 @@ class PS {
             . "         Any logs sent to " . PS::YELLOW_BD . "ClubLog.com" . PS::YELLOW . " have the " . PS::BLUE_BD . "TO_CLUBLOG" . PS::YELLOW ." flag set to 'Y' to indicate these\n"
             . "         have been uploaded.\n"
             . "       - No files are renamed and you won't be prompted to add a spot to " . PS::YELLOW_BD . "pota.app" . PS::YELLOW. ".\n"
+            . "       - If an optional number - e.g." . PS::GREEN_BD . "50" . PS::YELLOW . " argument is given, the maximum number of logs that will be\n"
+            . "         processed is capped at that number.\n"
+            . "         Use a value of 100 to avoid overloading Clublog with too many requests in 5 minutes\n"
             . "       - If the optional " . PS::GREEN_BD . "ALL" . PS::YELLOW . " argument is given, all logs at the park which are not indicated\n"
             . "         as having been already pushed will be sent to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW . "\n"
             . "\n" . PS::YELLOW_BD
@@ -1656,6 +1668,7 @@ class PS {
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SUMMARY\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SUMMARY " . PS::YELLOW_BD . "160m\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "PUSH\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "PUSH 50\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "PUSH ALL\n"
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::YELLOW_BD . "14074 " . PS::RED_BD . "\"FT8 - QRP 4w\"\n"
                     ;
