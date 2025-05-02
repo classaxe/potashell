@@ -356,14 +356,14 @@ class PS {
             if ($date && isset($record['QSO_DATE']) && ($record['QSO_DATE'] !== (string) $date)) {
                 continue;
             }
-            if ($this->modePushQty && is_int($this->modePushQty) && $processed > $this->modePushQty) {
-                continue;
+            if ($this->modePushQty && strtolower($this->modePushQty) !== 'all' && $processed >= $this->modePushQty) {
+                break;
             }
             $stats['ATTEMPTED']++;
             $adif = adif::toAdif([$record], $this->version, true, false);
             try {
                 $url = "https://clublog.org/realtime.php";
-                // $url = "https://logs.classaxe.com/custom/endpoint.php";
+                // $url = "https://logs.classaxe.com/custom/endpoint.php?response=OK";
                 $args = [
                     'email' =>      ($this->clublogEmail),
                     'password' =>   ($this->clublogPassword),
@@ -1365,7 +1365,7 @@ class PS {
             if ($date && ($record['QSO_DATE'] !== (string) $date)) {
                 continue;
             }
-            if ($this->modePushQty && is_int($this->modePushQty) && $processed > $this->modePushQty) {
+            if ($this->modePushQty && strtolower($this->modePushQty) !== 'all' && $processed >= $this->modePushQty) {
                 continue;
             }
             $stats['ATTEMPTED']++;
