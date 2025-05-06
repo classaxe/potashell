@@ -35,6 +35,14 @@
   3. You will need an active [**QRZ.com**](https://qrz.com) XML Subscriber's account for the
      automatic lookup of missing gridsquares to work, and for the system to automatically
      upload your logs to your QRZ.com logbook at the end of each session.
+  4. Optionally, if you have an account at [**Clublog**](https://clublog.org), you can provide your
+     credentials to have logs uploaded there too.
+  5. If you configure the [POTA] adif_directory parameter in the potashell.ini file to point
+     to a valid location on your computer, the system will automatically create a session-specific
+     .adi export file you can upload yourself directly to POTA via your web browser.<br><br>
+     If this file remains in place after your manual upload to POTA is completed, new session logs will
+     be appended to it, so for that reason it is recommended to delete this POTA session file AFTER you
+     have uploaded it to keep subsequent uploads fast and efficient. 
 
 ---
 
@@ -60,7 +68,14 @@ User Configuration is by means of the potashell.ini file located in this folder.
      session to successfully 'Activate' the park.
      - The `fix` option can also be used at any time to lookup any missing gridsquares and write in
      your full gridsquare reference for the park you are at, together with the park name in
-     **`MY_GRIDSQUARE`**<br><br>
+     **`MY_GRIDSQUARE`**
+     - The `push` option can also be used at any time to send logs to [**Clublog**](https://clublog.org/),
+     to [**QRZ.com**](https://qrz.com) and to a session specific POTA .adi log file for uploading to POTA
+     - The `review` option can be used with [**Potashell**](https://github.com/classaxe/potashell) at
+       any time during an activation to display all logs for the park.
+     - The `summary` option can be used with [**Potashell**](https://github.com/classaxe/potashell) at
+       any time during an activation to display a summary of logs for the park.
+     <br><br>
 
   3. AT THE END OF AN ACTIVATION ATTEMPT<br>
      Run the potashell script with the park identifier and accurate gridsquare reference when there

@@ -1506,7 +1506,8 @@ class PS {
             . "         4. " . PS::YELLOW . "The identified park - e.g. " . PS::CYAN_BD . "POTA: CA-1368 North Maple RP " . PS::YELLOW . "is written to all " . PS::GREEN_BD . "MY_CITY" . PS::YELLOW . " fields\n" . PS::YELLOW_BD
             . "         5. " . PS::YELLOW . "If you have an internet connection, logs in the current session are sent to " . PS::YELLOW_BD . "QRZ.com" . PS::YELLOW . ",\n"
             . "            and if your potashell.ini file contains ClubLog credentials, to " . PS::YELLOW_BD . "ClubLog.com" . PS::YELLOW . " also.\n" . PS::YELLOW_BD
-            . "         6. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
+            . "         6. " . PS::YELLOW . "If configured to do so, logs for the current session are used to create or append a POTA log file suitable for submitting to POTA.\n"
+            . "         7. " . PS::YELLOW . "The user is asked if they'd like to mark their " . PS::GREEN_BD . "SPOT" . PS::YELLOW . " in POTA as QRT (inactive).\n" . PS::YELLOW_BD
             . "            " . PS::YELLOW . "If they respond " . PS::RESPONSE_Y . ", potashell prompts for the " . PS::YELLOW_BD . "frequency" . PS::YELLOW . " and " . PS::RED_BD . "comment" . PS::YELLOW . ", usually\n"
             . "            starting with the code " . PS::RED_BD . "QRT" . PS::YELLOW . " indicating that the activation attempt has ended -\n"
             . "            for example: " . PS::RED_BD . "QRT - moving to CA-1369" . PS::YELLOW . "\n"
@@ -1537,6 +1538,7 @@ class PS {
             . "       - If potashell.ini file contains your Clublog credentials, logs will also go to " . PS::YELLOW_BD . "ClubLog.com" . PS::YELLOW . ".\n"
             . "         Any logs sent to " . PS::YELLOW_BD . "ClubLog.com" . PS::YELLOW . " have the " . PS::BLUE_BD . "TO_CLUBLOG" . PS::YELLOW ." flag set to 'Y' to indicate these\n"
             . "         have been uploaded.\n"
+            . "       - If configured to do so, logs for the current session are used to create or append a POTA log file suitable for submitting to POTA.\n"
             . "       - No files are renamed and you won't be prompted to add a spot to " . PS::YELLOW_BD . "pota.app" . PS::YELLOW. ".\n"
             . "       - If an optional number - e.g." . PS::GREEN_BD . "50" . PS::YELLOW . " argument is given, the maximum number of logs that will be\n"
             . "         processed is capped at that number.\n"
