@@ -36,9 +36,9 @@ class PS {
         'TO_QRZ',
         'TO_POTA',
     ];
-    const MAXLEN = 120;
+    const MAXLEN = 130;
 
-    const USERAGENT =   "POTASHELL v%s | https://github.com/classaxe/potashell | Copyright (C) %s Martin Francis VA3PHP";
+    const USERAGENT =   "POTASHELL v%s | (C) %s VA3PHP";
     const RED =         "\e[0;31m";
     const RED_BD =      "\e[1;31m";
     const GREEN =       "\e[0;32m";
@@ -627,6 +627,16 @@ class PS {
         return $count;
     }
 
+    private static function dataCountUploadType($data, $type) {
+        $count = 0;
+        foreach ($data as $d) {
+            if (isset($d[$type]) && $d[$type] === 'Y') {
+                $count++;
+            }
+        }
+        return $count;
+    }
+
     private static function dataGetDates($data) {
         $dates = [];
         foreach ($data as $d) {
@@ -926,9 +936,10 @@ class PS {
             . "  #MG = Missing Grid Squares\n"
             . "  #LS = Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
             . "  #B  = Number of bands\n"
+            . "  UPLOAD = Uploaded logs to C-Clublog, Q-QRZ, P-POTA export file\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', PS::MAXLEN) . "\n"
-            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | Park Name in Log File\n"
+            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD | Park Name in Log File\n"
             . str_repeat('-', PS::MAXLEN) . "\n";
         $i = 0;
         foreach ($files as $file) {
@@ -955,6 +966,11 @@ class PS {
                 $FT =       $ST - $AT;
                 $B =        static::dataCountBands($data);
                 $DX =       number_format(static::dataGetBestDx($data));
+/*
+                . (isset($log['TO_CLUBLOG']) ? ($log['TO_CLUBLOG'] === 'Y' ? 'C' : ' ') : ' ') . ' '
+                . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'P' : ' ') : ' ') . ' '
+                . (isset($log['TO_QRZ']) ?     ($log['TO_QRZ'] === 'Y' ?     'Q' : ' ') : ' ') . ' '
+*/
                 print
                     PS::BLUE_BD . str_pad($parkId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
@@ -962,16 +978,20 @@ class PS {
                         PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
                       ) . PS::GREEN_BD . " | "
 
-                    . str_pad($LT, 3, ' ', STR_PAD_LEFT) . " | "
-                    . str_pad($ST, 3, ' ', STR_PAD_LEFT) . " | "
-                    . str_pad($AT, 3, ' ', STR_PAD_LEFT) . " | "
-                    . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
-                    . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
+                    . str_pad($LT, 3, ' ', STR_PAD_LEFT) . ' | '
+                    . str_pad($ST, 3, ' ', STR_PAD_LEFT) . ' | '
+                    . str_pad($AT, 3, ' ', STR_PAD_LEFT) . ' | '
+                    . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
+                    . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
 
-                    . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . " | "
-                    . str_pad($B, 2, ' ', STR_PAD_LEFT) . " | "
-                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . " | "
-                    . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . "Lookup failed" . PS::GREEN_BD) . "\n";
+                    . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
+                    . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
+                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | '
+                    . (static::dataCountUploadType($data, 'TO_CLUBLOG') === $LT ? 'C' : ' ') . ' '
+                    . (static::dataCountUploadType($data, 'TO_QRZ') === $LT ? 'Q' : ' ') . ' '
+                    . (static::dataCountUploadType($data, 'TO_POTA') === $LT ? 'P' : ' ') . '  | '
+                    . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . 'Lookup failed' . PS::GREEN_BD)
+                    . "\n";
             }
         }
         print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
