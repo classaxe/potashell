@@ -381,7 +381,7 @@ class PS {
                 $result = curl_exec($curl);
                 curl_close($curl);
             } catch (\Exception $e) {
-                print PS::RED_BD . "WARNING:\n  Unable to connect to Clublog.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
+                print PS::RED_BD . "ERROR:\n  Unable to connect to Clublog.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
                 die(0);
             }
             switch ($result) {
@@ -1001,8 +1001,6 @@ class PS {
         $result =   $this->dataFix($data);
         $data =     $result['data'];
         $status =   $result['status'];
-        $adif =     $adif->toAdif($data, $this->version, false, true);
-        file_put_contents($filename, $adif);
         $resultClublog = '';
         $resultQrz = '';
         if ($this->clublogCheck()) {
@@ -1011,6 +1009,8 @@ class PS {
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
             $resultQrz = $this->qrzUpload($data, $date);
         }
+        $adif =     $adif->toAdif($data, $this->version, false, true);
+        file_put_contents($filename, $adif);
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
             . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
