@@ -105,6 +105,7 @@ class PS {
     private $parkNameAbbr;
     private $pathAdifLocal;
     private $php;
+    private $potaAdifDirectory;
     private $qrzApiKey;
     private $qrzApiCallsign;
     private $qrzPass;
@@ -243,6 +244,21 @@ class PS {
             die(0);
         }
 
+        // Clublog Details
+        if (!empty($this->config['CLUBLOG']['clublog_email']) &&
+            !empty($this->config['CLUBLOG']['clublog_password']) &&
+            !empty($this->config['CLUBLOG']['clublog_callsign'])
+        ) {
+            $this->clublogEmail = $this->config['CLUBLOG']['clublog_email'];
+            $this->clublogPassword = $this->config['CLUBLOG']['clublog_password'];
+            $this->clublogCallsign = $this->config['CLUBLOG']['clublog_callsign'];
+        }
+
+        // POTA Details
+        if (!empty($this->config['POTA']['adif_directory'])) {
+            $this->potaAdifDirectory = $this->config['POTA']['adif_directory'];
+        }
+
         // QRZ Details
         if (!empty($this->config['QRZ']['login']) && !empty($this->config['QRZ']['password'])) {
             $this->qrzLogin = $this->config['QRZ']['login'];
@@ -251,16 +267,6 @@ class PS {
         if (!empty($this->config['QRZ']['apicallsign']) && !empty($this->config['QRZ']['apikey'])) {
             $this->qrzApiCallsign = $this->config['QRZ']['apicallsign'];
             $this->qrzApiKey = $this->config['QRZ']['apikey'];
-        }
-
-        // Clublog Details
-            if (!empty($this->config['CLUBLOG']['clublog_email']) &&
-            !empty($this->config['CLUBLOG']['clublog_password']) &&
-            !empty($this->config['CLUBLOG']['clublog_callsign'])
-        ) {
-            $this->clublogEmail = $this->config['CLUBLOG']['clublog_email'];
-            $this->clublogPassword = $this->config['CLUBLOG']['clublog_password'];
-            $this->clublogCallsign = $this->config['CLUBLOG']['clublog_callsign'];
         }
     }
 
@@ -406,7 +412,7 @@ class PS {
         }
         return
             PS::GREEN_BD
-            . "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "ClubLog.com" . PS::GREEN_BD . "\n"
+            . "  - Uploaded " . PS::CYAN_BD . $stats['ATTEMPTED'] . PS::GREEN_BD . " new Logs to " . PS::YELLOW_BD . "ClubLog.com" . PS::GREEN_BD . "\n"
             . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
             . ($stats['UPDATED'] ?                   "     * Updated:        " . $stats['UPDATED'] . "\n" : "")
             . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
@@ -786,15 +792,38 @@ class PS {
         return $error ?: true;
     }
 
-    private function potaSaveLogs($data, $filename) {
+    private function potaSaveLogs(&$data) {
+        if (!$this->potaAdifDirectory) {
+            return '';
+        }
+        $filename = $this->potaAdifDirectory . DIRECTORY_SEPARATOR . "POTA_" . $this->inputPotaId . ".adi";
         $export = [];
-        foreach ($data as $record) {
+        foreach ($data as &$record) {
             if ($record['TO_POTA'] === 'Y') {
                 continue;
             }
+            $record['TO_POTA'] = 'Y';
             $export[] = $record;
         }
-        $adif = adif::toAdif($export, $this->version, false, true);
+        if (!empty($export)) {
+            $complete = [];
+            if (file_exists($filename)) {
+                print "Appending\n";
+                $adif =     new adif($filename);
+                $complete = array_merge($adif->parser(), $export);
+            } else {
+                print "Creating\n";
+                $adif =     new adif('');
+                $complete = $export;
+            }
+            $adif =     $adif->toAdif($complete, $this->version, false, true);
+            file_put_contents($filename, $adif);
+        }
+        return "  - Inserted " . PS::CYAN_BD . count($export) . PS::GREEN_BD . " new " . (count($export) === 1 ? "log" : "logs")
+            . " in " . PS::YELLOW_BD . "POTA export file\n"
+            . "      " . PS::CYAN_BD . $filename . PS::GREEN_BD . "\n";
+
+//        $adif = adif::toAdif($export, $this->version, false, true);
     }
 
     private function process() {
@@ -1001,13 +1030,17 @@ class PS {
         $result =   $this->dataFix($data);
         $data =     $result['data'];
         $status =   $result['status'];
-        $resultClublog = '';
-        $resultQrz = '';
+        $resCL =    '';
+        $resQrz =   '';
+        $resPota =  '';
         if ($this->clublogCheck()) {
-            $resultClublog = $this->clublogUpload($data, $date);
+            $resCL = $this->clublogUpload($data, $date);
         }
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $resultQrz = $this->qrzUpload($data, $date);
+            $resQrz = $this->qrzUpload($data, $date);
+        }
+        if ($this->potaAdifDirectory) {
+            $resPota = $this->potaSaveLogs($data);
         }
         $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
@@ -1023,8 +1056,9 @@ class PS {
                 )
                 . PS::GREEN_BD . " missing gridsquares." . PS::GREEN_BD . "\n" : ""
               )
-            . $resultClublog
-            . $resultQrz
+            . $resCL
+            . $resQrz
+            . $resPota
             . "\n"
             . PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
             . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
@@ -1099,17 +1133,21 @@ class PS {
 
         $adif = $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        $resultClublog = '';
-        $resultQrz = '';
+        $resCL =    '';
+        $resQrz =   '';
+        $resPota =  '';
         if ($this->clublogCheck()) {
-            $resultClublog = $this->clublogUpload($data, $date);
+            $resCL = $this->clublogUpload($data, $date);
         }
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
-            $resultQrz = $this->qrzUpload($data, $date);
+            $resQrz = $this->qrzUpload($data, $date);
+        }
+        if ($this->potaAdifDirectory) {
+            $resPota = $this->potaSaveLogs($data);
         }
         $adif = adif::toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        print $resultClublog . $resultQrz . "\n" . PS::RESET;
+        print $resCL . $resQrz . $resPota . "\n" . PS::RESET;
     }
 
     private function processParkSpot() {
@@ -1409,7 +1447,7 @@ class PS {
             $processed++;
         }
         return PS::GREEN_BD
-            . "  - Uploaded " . $stats['ATTEMPTED'] . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
+            . "  - Uploaded " . PS::CYAN_BD . $stats['ATTEMPTED'] . PS::GREEN_BD . " new Logs to " . PS::YELLOW_BD . "QRZ.com" . PS::GREEN_BD . "\n"
             . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
             . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
             . ($stats['WRONG_CALL'] ?   PS::RED_BD . "     * Wrong Callsign: " . $stats['WRONG_CALL'] . "\n" . PS::GREEN_BD : "")
