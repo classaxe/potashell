@@ -84,12 +84,12 @@ class PS {
     private $clublogCallsign;
     private $clublogEmail;
     private $clublogPassword;
-
+    private $customLocations;
     private $fileAdifPark;
     private $fileAdifWsjtx;
     private $hasInternet = false;
     private $inputGSQ;
-    private $inputPotaId;
+    private $inputQthId;
     private $mode;
     private $modeAudit;
     private $modeCheck;
@@ -101,11 +101,12 @@ class PS {
     private $modeSummary;
     private $modeSyntax;
     private $HTTPcontext;
-    private $parkName;
-    private $parkNameAbbr;
+    private $locationName;
+    private $locationNameAbbr;
+    private $locationType;
     private $pathAdifLocal;
     private $php;
-    private $potaAdifDirectory;
+    private $sessionAdifDirectory;
     private $qrzApiKey;
     private $qrzApiCallsign;
     private $qrzPass;
@@ -169,7 +170,7 @@ class PS {
             $this->modeSyntax = true;
             return;
         }
-        $this->inputPotaId =    $arg1;
+        $this->inputQthId =     $arg1;
         $this->inputGSQ =       $arg2;
         $this->mode =           $arg3 ? strtoupper($arg3) : '';
         $this->modeCheck =      $this->mode && $this->mode === 'CHECK';
@@ -191,12 +192,12 @@ class PS {
 
     private function argsGetInput() {
         print "\n" . PS::YELLOW_BD . "ARGUMENTS:\n";
-        if ($this->inputPotaId === null) {
-            print PS::GREEN_BD . "  - Please provide POTA Park ID:  " . PS::BLUE_BD;
+        if ($this->inputQthId === null) {
+            print PS::GREEN_BD . "  - Please provide Location ID:  " . PS::BLUE_BD;
             $fin = fopen("php://stdin","r");
-            $this->inputPotaId = trim(fgets($fin));
+            $this->inputQthId = trim(fgets($fin));
         } else {
-            print PS::GREEN_BD . "  - Supplied POTA Park ID:        " . PS::BLUE_BD . $this->inputPotaId . "\n";
+            print PS::GREEN_BD . "  - Supplied Location ID:        " . PS::BLUE_BD . $this->inputQthId . "\n";
         }
         if ($this->inputGSQ === null) {
             print PS::GREEN_BD . "  - Please provide 8/10-char GSQ: " . PS::CYAN_BD;
@@ -205,7 +206,7 @@ class PS {
         } else {
             print PS::GREEN_BD . "  - Supplied Gridsquare:          " . PS::CYAN_BD . $this->inputGSQ . "\n";
         }
-        $this->parkName = "POTA: " . $this->inputPotaId;
+        $this->locationName = "POTA: " . $this->inputQthId;
         print "\n";
     }
 
@@ -254,9 +255,14 @@ class PS {
             $this->clublogCallsign = $this->config['CLUBLOG']['clublog_callsign'];
         }
 
-        // POTA Details
-        if (!empty($this->config['POTA']['adif_directory'])) {
-            $this->potaAdifDirectory = $this->config['POTA']['adif_directory'];
+        // CUSTOM Locations
+        if (!empty($this->config['CUSTOM']['location'])) {
+            $this->customLocations = $this->config['CUSTOM']['location'];
+        }
+
+        // SESSION Details
+        if (!empty($this->config['SESSION']['adif_directory'])) {
+            $this->sessionAdifDirectory = $this->config['SESSION']['adif_directory'];
         }
 
         // QRZ Details
@@ -483,8 +489,8 @@ class PS {
                 }
             }
             $record['MY_GRIDSQUARE'] =  $this->inputGSQ;
-            $record['MY_CITY'] =        $this->parkNameAbbr;
-            $record['PARK'] =           $this->inputPotaId;
+            $record['MY_CITY'] =        $this->locationNameAbbr;
+            $record['PARK'] =           $this->inputQthId;
             $record['MODECOMP'] = ($record['MODE'] === 'MFSK' && $record['SUBMODE'] === 'FT4' ? 'FT4' : $record['MODE']);
             $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
             $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
@@ -726,6 +732,23 @@ class PS {
         ]);
     }
 
+    private function getLocationName($qthID) {
+        if (!empty($this->customLocations)) {
+            foreach ($this->customLocations as $location) {
+                $locationBits = explode('|', $location);
+                if ($locationBits[0] === $qthID) {
+                    return [
+                        'abbr' => $locationBits[1],
+                        'name' => $qthID,
+                        'type' => 'CUSTOM'
+                    ];
+                }
+            }
+        }
+
+        return $this->potaGetParkName($qthID);
+    }
+
     private function internetCheck() {
         if (!@fsockopen('www.example.com', 80)) {
             print
@@ -773,20 +796,21 @@ class PS {
         $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
         $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
         return [
+            'abbr' => $parkNameAbbr,
             'name' => $parkName,
-            'abbr' => $parkNameAbbr
+            'type' => 'POTA'
         ];
     }
 
     private function potaPublishSpot() {
         $url = 'https://api.pota.app/spot/';
         // $url = 'https://logs.classaxe.com/test.php';
-        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzApiCallsign);
+        $activator = ($this->inputQthId === 'K-TEST' ? 'ABC123' : $this->qrzApiCallsign);
         $data = json_encode([
             'activator' =>  $activator,
             'spotter' =>    $this->qrzApiCallsign,
             'frequency' =>  $this->spotKhz,
-            'reference' =>  $this->inputPotaId,
+            'reference' =>  $this->inputQthId,
             'source' =>     'Potashell ' . $this->version . ' - https://github.com/classaxe/potashell',
             'comments' =>   $this->spotComment
         ]);
@@ -803,10 +827,10 @@ class PS {
     }
 
     private function potaSaveLogs(&$data) {
-        if (!$this->potaAdifDirectory) {
+        if (!$this->sessionAdifDirectory) {
             return '';
         }
-        $filename = $this->potaAdifDirectory . DIRECTORY_SEPARATOR . "POTA_" . $this->inputPotaId . ".adi";
+        $filename = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . $this->locationType . "_" . $this->inputQthId . ".adi";
         $export = [];
         foreach ($data as &$record) {
             if ($record['TO_POTA'] === 'Y') {
@@ -830,7 +854,7 @@ class PS {
             file_put_contents($filename, $adif);
         }
         return "  - Inserted " . PS::CYAN_BD . count($export) . PS::GREEN_BD . " new " . (count($export) === 1 ? "log" : "logs")
-            . " in " . PS::YELLOW_BD . "POTA export file\n"
+            . " in " . PS::YELLOW_BD . "Session export file\n"
             . "      " . PS::CYAN_BD . $filename . PS::GREEN_BD . "\n";
 
 //        $adif = adif::toAdif($export, $this->version, false, true);
@@ -838,7 +862,7 @@ class PS {
 
     private function process() {
         print PS::YELLOW_BD . "STATUS:\n";
-        if (!$this->modeAudit && (!$this->inputPotaId || !$this->inputGSQ)) {
+        if (!$this->modeAudit && (!$this->inputQthId || !$this->inputGSQ)) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
                 . "    Unable to continue.\n" . PS::RESET . "\n";
             die(0);
@@ -847,18 +871,19 @@ class PS {
             $this->processAudit();
             return;
         }
-        if (!$lookup = $this->potaGetParkName($this->inputPotaId)) {
-            print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputPotaId}.\n" . PS::RESET . "\n";
+        if (!$lookup = $this->getLocationName($this->inputQthId)) {
+            print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputQthId}.\n" . PS::RESET . "\n";
             die(0);
         }
-        $this->parkName =       $lookup['name'];
-        $this->parkNameAbbr =   $lookup['abbr'];
+        $this->locationName =       $lookup['name'];
+        $this->locationNameAbbr =   $lookup['abbr'];
+        $this->locationType =       $lookup['type'];
         print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . $this->inputGSQ . ' '
-            . PS::CYAN_BD . $this->inputPotaId . ' ' . PS::GREEN_BD . strtoupper($this->mode) . ' ' . $this->modePushQty
+            . PS::CYAN_BD . $this->inputQthId . ' ' . PS::GREEN_BD . strtoupper($this->mode) . ' ' . $this->modePushQty
             . PS::MAGENTA_BD . $this->argCheckBand . "\n"
-            . PS::GREEN_BD . "  - Identified Park:  " . PS::CYAN_BD . $this->parkName . "\n"
-            . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->parkNameAbbr . "\n";
-        $this->fileAdifPark =   "wsjtx_log_{$this->inputPotaId}.adi";
+            . PS::GREEN_BD . "  - Identified QTH:   " . PS::CYAN_BD . $this->locationName . "\n"
+            . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->locationNameAbbr . "\n";
+        $this->fileAdifPark =   "wsjtx_log_{$this->inputQthId}.adi";
         $this->fileAdifWsjtx =  "wsjtx_log.adi";
 
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
@@ -886,7 +911,7 @@ class PS {
             return;
         }
 
-        if ($this->modeSpot) {
+        if ($this->modeSpot && $this->locationType === 'POTA') {
             $this->processParkSpot();
             return;
         }
@@ -946,8 +971,8 @@ class PS {
             if (is_file($file)) {
                 // if ($i++ > 4) { continue; }  // For development testing
                 $fn =       basename($file);
-                $parkId =   explode('.', explode('_', $fn)[2])[0];
-                $lookup =   $this->potaGetParkName($parkId);
+                $qthId =    explode('.', explode('_', $fn)[2])[0];
+                $lookup =   $this->getLocationName($qthId);
 
                 $adif =     new adif($file);
                 $data =     $adif->parser();
@@ -966,13 +991,9 @@ class PS {
                 $FT =       $ST - $AT;
                 $B =        static::dataCountBands($data);
                 $DX =       number_format(static::dataGetBestDx($data));
-/*
-                . (isset($log['TO_CLUBLOG']) ? ($log['TO_CLUBLOG'] === 'Y' ? 'C' : ' ') : ' ') . ' '
-                . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'P' : ' ') : ' ') . ' '
-                . (isset($log['TO_QRZ']) ?     ($log['TO_QRZ'] === 'Y' ?     'Q' : ' ') : ' ') . ' '
-*/
+
                 print
-                    PS::BLUE_BD . str_pad($parkId, 8, ' ') . PS::GREEN_BD . " | "
+                    PS::BLUE_BD . str_pad($qthId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
                         PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
                         PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
@@ -1026,10 +1047,10 @@ class PS {
             . "\n"
             . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
 
-        if (isset($locs[0]) && trim(substr($locs[0], 0, 14)) !== trim(substr($this->parkNameAbbr, 0, 14))) {
+        if (isset($locs[0]) && trim(substr($locs[0], 0, 14)) !== trim(substr($this->locationNameAbbr, 0, 14))) {
             print PS::RED_BD . "ERROR:\n"
                 . "  * The log contains reports made at      " . PS::BLUE_BD . $locs[0] . PS::RED_BD . "\n"
-                . "  * You indicate that your logs were from " . PS::BLUE_BD . $this->parkNameAbbr . PS::RED_BD . "\n"
+                . "  * You indicate that your logs were from " . PS::BLUE_BD . $this->locationNameAbbr . PS::RED_BD . "\n"
                 . "  * The operation has been cancelled.\n"
                 . PS::RESET;
             return;
@@ -1059,7 +1080,7 @@ class PS {
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
             $resQrz = $this->qrzUpload($data, $date);
         }
-        if ($this->potaAdifDirectory) {
+        if ($this->sessionAdifDirectory) {
             $resPota = $this->potaSaveLogs($data);
         }
         $adif =     $adif->toAdif($data, $this->version, false, true);
@@ -1067,7 +1088,7 @@ class PS {
         print "  - Archived log file " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
             . "  to " . PS::BLUE_BD ."{$this->fileAdifPark}" . PS::GREEN_BD . ".\n"
             . "  - Updated " . PS::MAGENTA_BD ."MY_GRIDSQUARE" . PS::GREEN_BD ." values     to " . PS::CYAN_BD . $this->inputGSQ . PS::GREEN_BD . ".\n"
-            . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::CYAN_BD . $this->parkNameAbbr . PS::GREEN_BD . ".\n"
+            . "  - Added " . PS::MAGENTA_BD ."MY_CITY" . PS::GREEN_BD ." and set all values to " . PS::CYAN_BD . $this->locationNameAbbr . PS::GREEN_BD . ".\n"
             . (!empty($this->qrzSession) && $status['GRIDSQUARE']['missing'] ? "  - Obtained " . PS::CYAN_BD
                 . ($status['GRIDSQUARE']['fixed'] ?
                     ($status['GRIDSQUARE']['missing'] - $status['GRIDSQUARE']['fixed']) . " of " . $status['GRIDSQUARE']['missing']
@@ -1079,27 +1100,29 @@ class PS {
             . $resCL
             . $resQrz
             . $resPota
-            . "\n"
-            . PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
-            . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
+            . "\n";
+        if ($this->locationType === 'POTA') {
+            print PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
+                . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
 
-        $fin = fopen("php://stdin","r");
-        $response = strToUpper(trim(fgets($fin)));
+            $fin = fopen("php://stdin", "r");
+            $response = strToUpper(trim(fgets($fin)));
 
-        if ($response === 'Y') {
-            print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
-            $this->spotKhz = trim(fgets($fin));
+            if ($response === 'Y') {
+                print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
+                $this->spotKhz = trim(fgets($fin));
 
-            print PS::GREEN_BD . "    Enter comment - e.g. QRT - moving to CA-1234            " . PS::RED_BD;
-            $this->spotComment = trim(fgets($fin));
+                print PS::GREEN_BD . "    Enter comment - e.g. QRT - moving to CA-1234            " . PS::RED_BD;
+                $this->spotComment = trim(fgets($fin));
 
-            $this->processParkSpot();
+                $this->processParkSpot();
+            }
         }
 
         print PS::YELLOW_BD . "\nNEXT STEP:\n" . PS::GREEN_BD
             . "  - You should now restart WSJT-X before logging at another park, where\n"
             . "    a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
-            . "  - Alternatively, run this script again with a new POTA Park ID to resume\n"
+            . "  - Alternatively, run this script again with a new Location ID to resume\n"
             . "    logging at a previously visited park.\n"
             . PS::RESET;
     }
@@ -1162,7 +1185,7 @@ class PS {
         if ($this->qrzApiCallsign && $this->qrzApiKey) {
             $resQrz = $this->qrzUpload($data, $date);
         }
-        if ($this->potaAdifDirectory) {
+        if ($this->sessionAdifDirectory) {
             $resPota = $this->potaSaveLogs($data);
         }
         $adif = adif::toAdif($data, $this->version, false, true);
@@ -1171,7 +1194,7 @@ class PS {
     }
 
     private function processParkSpot() {
-        $activator = ($this->inputPotaId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
+        $activator = ($this->inputQthId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
         $linelen = 44 + strlen($this->spotComment);
         print PS::YELLOW_BD . "\nPENDING OPERATION:\n"
             . PS::GREEN_BD . "    The following spot will be published at pota.app:\n\n"
@@ -1181,7 +1204,7 @@ class PS {
             . str_pad($activator, 10, ' ') . ' '
             . str_pad($this->qrzLogin, 10, ' ') . ' '
             . str_pad($this->spotKhz, 8, ' ') . ' '
-            . str_pad($this->inputPotaId, 10, ' ') . ' '
+            . str_pad($this->inputQthId, 10, ' ') . ' '
             . $this->spotComment . "\n"
             . "    " . str_repeat('-', $linelen) . "\n\n"
             . PS::YELLOW_BD . "CONFIRMATION REQUIRED:\n"
@@ -1195,7 +1218,7 @@ class PS {
         $result = $this->potaPublishSpot();
         if ($result === true) {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
-                . "  - Your spot at " . PS::BLUE_BD . $this->inputPotaId . PS::GREEN_BD . " on " . PS::MAGENTA_BD . $this->spotKhz . " KHz" . PS::GREEN_BD
+                . "  - Your spot at " . PS::BLUE_BD . $this->inputQthId . PS::GREEN_BD . " on " . PS::MAGENTA_BD . $this->spotKhz . " KHz" . PS::GREEN_BD
                 . " has been published on " . PS::YELLOW_BD . "pota.app" . PS::GREEN_BD . " as " . PS::RED_BD . "\"" . $this->spotComment . "\"" . PS::GREEN_BD . "\n"
                 . PS::RESET;
             return true;
@@ -1207,19 +1230,22 @@ class PS {
 
     private function processParkInitialise() {
         print PS::GREEN_BD . "  - This is a first time visit, since neither " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
-            . " nor " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " exist.\n\n"
-            . PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
-            . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
-        $fin = fopen("php://stdin","r");
-        $response = strToUpper(trim(fgets($fin)));
-        if ($response === 'Y') {
-            print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
-            $this->spotKhz = trim(fgets($fin));
+            . " nor " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " exist.\n\n";
 
-            print PS::GREEN_BD . "    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   " . PS::RED_BD;
-            $this->spotComment = trim(fgets($fin));
+        if ($this->locationType === 'POTA') {
+            print PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
+                . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
+            $fin = fopen("php://stdin","r");
+            $response = strToUpper(trim(fgets($fin)));
+            if ($response === 'Y') {
+                print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
+                $this->spotKhz = trim(fgets($fin));
 
-            $this->processParkSpot();
+                print PS::GREEN_BD . "    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   " . PS::RED_BD;
+                $this->spotComment = trim(fgets($fin));
+
+                $this->processParkSpot();
+            }
         }
         print "\n" . PS::YELLOW_BD . "NEXT STEP:\n" . PS::GREEN_BD
             . "  - Please restart WSJT-X if you were logging at another park to allow " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD
@@ -1244,7 +1270,7 @@ class PS {
         }
         print PS::YELLOW_BD . "PENDING OPERATION:\n"
             . PS::GREEN_BD . "  - Rename archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD . " to " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD ."\n"
-            . "  - Resume logging at park " . PS::RED_BD . "{$this->parkName}" . PS::GREEN_BD . "\n\n"
+            . "  - Resume logging at park " . PS::RED_BD . "{$this->locationName}" . PS::GREEN_BD . "\n\n"
             . PS::YELLOW_BD . "CHOICE:\n" . PS::GREEN_BD . "    Continue with operation? (Y/N) ";
         $fin = fopen("php://stdin","r");
         $response = strToUpper(trim(fgets($fin)));
@@ -1257,22 +1283,24 @@ class PS {
                 $this->pathAdifLocal . $this->fileAdifWsjtx
             );
             print "    Renamed archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
-                . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}" . PS::GREEN_BD . "\n\n"
-                . PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
-                . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
-            $fin = fopen("php://stdin","r");
-            $response = strToUpper(trim(fgets($fin)));
-            if ($response === 'Y') {
-                print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
-                $this->spotKhz = trim(fgets($fin));
+                . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}" . PS::GREEN_BD . "\n\n";
+            if ($this->locationType === 'POTA') {
+                print PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
+                    . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
+                $fin = fopen("php://stdin", "r");
+                $response = strToUpper(trim(fgets($fin)));
+                if ($response === 'Y') {
+                    print PS::GREEN_BD . "    Please enter frequency in KHz:                          " . PS::MAGENTA_BD;
+                    $this->spotKhz = trim(fgets($fin));
 
-                print PS::GREEN_BD . "    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   " . PS::RED_BD;
-                $this->spotComment = trim(fgets($fin));
+                    print PS::GREEN_BD . "    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   " . PS::RED_BD;
+                    $this->spotComment = trim(fgets($fin));
 
-                $this->processParkSpot();
+                    $this->processParkSpot();
+                }
             }
             print PS::YELLOW_BD . "\nNEXT STEP:\n" . PS::GREEN_BD
-                . "    You may resume logging at " . PS::RED_BD . "{$this->parkName}\n\n"
+                . "    You may resume logging at " . PS::RED_BD . "{$this->locationName}\n\n"
                 . PS::RESET;
         } else {
             print "    Operation cancelled.\n";
@@ -1598,7 +1626,7 @@ class PS {
             ['label' => 'DATE',     'src' => 'QSO_DATE',         'len' => 4],
             ['label' => 'UTC',      'src' => 'TIME_ON',          'len' => 3],
             ['label' => 'YOU',      'src' => 'STATION_CALLSIGN', 'len' => 3],
-            ['label' => 'PARK',     'src' => 'PARK',             'len' => 4],
+            ['label' => 'LOC ID',   'src' => 'PARK',             'len' => 4],
             ['label' => 'GSQ',      'src' => 'MY_GRIDSQUARE',    'len' => 3],
             ['label' => 'CALLSIGN', 'src' => 'CALL',             'len' => 8],
             ['label' => 'BAND',     'src' => 'BAND',             'len' => 4],

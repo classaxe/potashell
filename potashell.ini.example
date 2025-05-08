@@ -20,12 +20,23 @@
 ; clublog_callsign = "A12BCD"
 
 
-[POTA]
-; Uncomment and correct the adif_directory entry to have logs for the session written
-; to a single '.adi' file named like this:
-; POTA_AA-1234.adi (where AA-1234 would be the park ID)
+[CUSTOM]
+; To use this tool with other non-pota locations, you may add them below.
+; POTA Spotting operations are disabled for custom locations, and location name lookups
+; are skipped - instead your supplied location description is used.
+; At the end of your session, or when you use the "push" command, logs will be uploaded
+; to qrz.com and clublog if enabled, but the session log file will be prefixed CUSTOM
+; instead of POTA
 ;
-; adif_directory = "/Users/Username/Downloads"
+; Consider running the following command, with the example locations below uncommented:
+;     potashell XX-0003 FN04IA34
+;
+; The ADIF file will be called "wsjtx_log_XX-0003.adi"
+; MY_CITY values will be set to "YRARC Field Day site at Whitchurch-Stouffville"
+;
+; location[] = "XX-0001|Family Cottage at Balsam Lake"
+; location[] = "XX-0002|Chalet #8 at Shalom By The Lake"
+; location[] = "XX-0003|YRARC Field Day site at Whitchurch-Stouffville"
 
 
 [QRZ]
@@ -40,6 +51,18 @@ password = "S3cret"
 ;
 apicallsign = "A12BCD"
 apikey = "ABCD-1234-ABCD-1234"
+
+
+[SESSION]
+; Uncomment and correct the adif_directory entry to have logs for the session written
+; to a single '.adi' file named like this:
+;   POTA_AA-1234.adi (where AA-1234 would be the park ID)
+;
+; Note that if the location identifier is one of those listed in the [CUSTOM] section
+; then the file name will look like this:
+;   CUSTOM_XX-0003.adi
+;
+; adif_directory = "/Users/Username/Downloads"
 
 
 [WSJTX]
