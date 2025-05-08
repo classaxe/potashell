@@ -1008,9 +1008,9 @@ class PS {
                     . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                     . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
                     . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | '
-                    . (static::dataCountUploadType($data, 'TO_CLUBLOG') === $LT ? 'C' : ' ') . ' '
-                    . (static::dataCountUploadType($data, 'TO_QRZ') === $LT ? 'Q' : ' ') . ' '
-                    . (static::dataCountUploadType($data, 'TO_POTA') === $LT ? 'P' : ' ') . '  | '
+                    . (static::dataCountUploadType($data, 'TO_CLUBLOG') === count($data) ? 'C' : ' ') . ' '
+                    . (static::dataCountUploadType($data, 'TO_QRZ') === count($data) ? 'Q' : ' ') . ' '
+                    . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . '  | '
                     . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . 'Lookup failed' . PS::GREEN_BD)
                     . "\n";
             }
