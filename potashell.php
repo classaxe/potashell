@@ -953,18 +953,27 @@ class PS {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
             return;
         }
+        $columns = str_replace(
+            "|",
+            PS::GREEN_BD . "|" . PS::CYAN_BD,
+            "QTH ID   | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD | Park Name in Log File"
+        );
+
         print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
-            . "  #LT = Logs in total - excluding duplicates\n"
-            . "  #ST = Sessions in Total\n"
-            . "  #SA = Successful Activations\n"
-            . "  #FA = Failed Activations\n"
-            . "  #MG = Missing Grid Squares\n"
-            . "  #LS = Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
-            . "  #B  = Number of bands\n"
-            . "  UPLOAD = Uploaded logs to C-Clublog, Q-QRZ, P-POTA export file\n"
+            . "  " . PS::CYAN_BD . "#LT" . PS::GREEN_BD . " =    Logs in total - excluding duplicates\n"
+            . "  " . PS::CYAN_BD . "#ST" . PS::GREEN_BD . " =    Sessions in Total\n"
+            . "  " . PS::CYAN_BD . "#SA" . PS::GREEN_BD . " =    Successful Activations\n"
+            . "  " . PS::CYAN_BD . "#FA" . PS::GREEN_BD . " =    Failed Activations\n"
+            . "  " . PS::CYAN_BD . "#MG" . PS::GREEN_BD . " =    Missing Grid Squares\n"
+            . "  " . PS::CYAN_BD . "#LS" . PS::GREEN_BD . " =    Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
+            . "  " . PS::CYAN_BD . "#B" . PS::GREEN_BD . "  =    Number of bands\n"
+            . "  " . PS::CYAN_BD . "UPLOAD" . PS::GREEN_BD . " = Uploaded logs to "
+            . PS::YELLOW . "C" . PS::GREEN_BD . "-Clublog, "
+            . PS::YELLOW . "Q" . PS::GREEN_BD . "-QRZ, "
+            . PS::YELLOW . "X" . PS::GREEN_BD . "-eXport file for session\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', PS::MAXLEN) . "\n"
-            . "POTA ID  | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD | Park Name in Log File\n"
+            .  PS::CYAN_BD . $columns . PS::GREEN_BD . "\n"
             . str_repeat('-', PS::MAXLEN) . "\n";
         $i = 0;
         foreach ($files as $file) {
@@ -1007,10 +1016,10 @@ class PS {
 
                     . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                     . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
-                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | '
+                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' |  ' . PS::YELLOW
                     . (static::dataCountUploadType($data, 'TO_CLUBLOG') === count($data) ? 'C' : ' ') . ' '
                     . (static::dataCountUploadType($data, 'TO_QRZ') === count($data) ? 'Q' : ' ') . ' '
-                    . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . '  | '
+                    . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'X' : ' ') . PS::GREEN_BD . ' | '
                     . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . 'Lookup failed' . PS::GREEN_BD)
                     . "\n";
             }
@@ -1667,10 +1676,10 @@ class PS {
                 }
                 switch($column['src']) {
                     case '_':
-                        $row[] = PS::CYAN
+                        $row[] = ' ' . PS::YELLOW
                             . (isset($log['TO_CLUBLOG']) ? ($log['TO_CLUBLOG'] === 'Y' ? 'C' : ' ') : ' ') . ' '
-                            . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'P' : ' ') : ' ') . ' '
                             . (isset($log['TO_QRZ']) ?     ($log['TO_QRZ'] === 'Y' ?     'Q' : ' ') : ' ') . ' '
+                            . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'X' : ' ') : ' ') . ' '
                             . PS::GREEN;
                         break;
                     case 'DX':
@@ -1684,7 +1693,11 @@ class PS {
             $rows[] = implode(' | ', $row);
         }
         return
-            PS::YELLOW_BD . "LOGS:\n" . PS::GREEN
+            PS::YELLOW_BD . "LOGS:" . str_repeat(' ', strlen($head) - 74)
+            . PS::CYAN_BD . "UPLOAD" . PS::GREEN . " = Uploaded logs to "
+            . PS::YELLOW . "C" . PS::GREEN . "-Clublog, "
+            . PS::YELLOW . "Q" . PS::GREEN . "-QRZ, "
+            . PS::YELLOW . "X" . PS::GREEN . "-eXport file for session\n"
             . str_repeat('-', strlen($head) + 1) . "\n"
             . $head_bd . "\n"
             . str_repeat('-', strlen($head) + 1) . "\n"
