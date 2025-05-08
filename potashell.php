@@ -361,7 +361,11 @@ class PS {
             'INSERTED' =>   0
         ];
         $processed = 0;
+        $rateLimitExceeded = false;
         foreach ($data as &$record) {
+            if ($rateLimitExceeded) {
+                continue;
+            }
             if (isset($record['TO_CLUBLOG']) && $record['TO_CLUBLOG'] === 'Y') {
                 continue;
             }
@@ -411,7 +415,9 @@ class PS {
                     break;
                 default:
                     $stats['ERROR']++;
-                    d("RESULT WAS" . $result);
+                    if (strpos($result, "Excessive realtime API usage") !== false) {
+                        $rateLimitExceeded = true;
+                    }
                     break;
             }
             $processed++;
