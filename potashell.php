@@ -364,6 +364,7 @@ class PS {
         $rateLimitExceeded = false;
         foreach ($data as &$record) {
             if ($rateLimitExceeded) {
+                $stats['ERROR']++;
                 continue;
             }
             if (isset($record['TO_CLUBLOG']) && $record['TO_CLUBLOG'] === 'Y') {
@@ -1060,7 +1061,7 @@ class PS {
         }
         print ($this->qrzApiKey ? "  - Upload park log to " . PS::BLUE_BD . "QRZ.com" . PS::GREEN_BD . "\n" : "")
             . "\n"
-            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
+            . ($this->locationType === 'POTA' && $logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
 
         if (isset($locs[0]) && trim(substr($locs[0], 0, 14)) !== trim(substr($this->locationNameAbbr, 0, 14))) {
             print PS::RED_BD . "ERROR:\n"
@@ -1661,7 +1662,7 @@ class PS {
         }
 
         $columns[0]['len'] = strlen('' . (1 + count($logs)));
-        $num = str_repeat(' ', strlen(number_format(count($logs)))) . '#';
+        $num = str_repeat(' ', max(2, strlen(number_format(count($logs))))) . '#';
         $header = [$num];
         $header_bd = [PS::CYAN_BD . $num . PS::GREEN];
         foreach ($columns as &$column) {
@@ -1675,7 +1676,7 @@ class PS {
         $head_bd =  implode(' | ', $header_bd);
         $rows = [];
         foreach ($logs as $i => $log) {
-            $row = [PS::YELLOW_BD . str_pad('' . (1 + $i), $columns[0]['len'], ' ', STR_PAD_LEFT) . PS::GREEN];
+            $row = [PS::YELLOW_BD . str_pad( '' . ($i + 1), $columns[0]['len'], ' ', STR_PAD_LEFT) . PS::GREEN];
             foreach ($columns as &$column) {
                 if ($column['src'] === false) {
                     continue;
