@@ -358,7 +358,8 @@ class PS {
             'UPDATED' =>    0,
             'DUPLICATE' =>  0,
             'ERROR' =>      0,
-            'INSERTED' =>   0
+            'INSERTED' =>   0,
+            'LAST_ERROR' => ''
         ];
         $processed = 0;
         $rateLimitExceeded = false;
@@ -416,6 +417,7 @@ class PS {
                     break;
                 default:
                     $stats['ERROR']++;
+                    $stats['LAST_ERROR'] = $result;
                     if (strpos($result, "Excessive realtime API usage") !== false) {
                         $rateLimitExceeded = true;
                     }
@@ -429,7 +431,9 @@ class PS {
             . ($stats['INSERTED'] ?                  "     * Inserted:       " . $stats['INSERTED'] . "\n" : "")
             . ($stats['UPDATED'] ?                   "     * Updated:        " . $stats['UPDATED'] . "\n" : "")
             . ($stats['DUPLICATE'] ?    PS::RED_BD . "     * Duplicates:     " . $stats['DUPLICATE'] . "\n" . PS::GREEN_BD : "")
-            . ($stats['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $stats['ERROR'] . "\n" . PS::GREEN_BD : "");
+            . ($stats['ERROR'] ?        PS::RED_BD . "     * Errors:         " . $stats['ERROR'] . "\n" . PS::GREEN_BD : "")
+            . ($stats['LAST_ERROR'] ?   PS::RED_BD . "     * Last Error:     " . $stats['LAST_ERROR'] . "\n" . PS::GREEN_BD : "")
+            ;
     }
 
     private static function dataCountActivations($data) {
@@ -1059,7 +1063,9 @@ class PS {
                 . PS::RESET;
             return;
         }
-        print ($this->qrzApiKey ? "  - Upload park log to " . PS::BLUE_BD . "QRZ.com" . PS::GREEN_BD . "\n" : "")
+        print ($this->qrzApiKey ?           "  - Upload park log to " . PS::BLUE_BD . "Clublog.org" . PS::GREEN_BD . "\n" : "")
+            . ($this->clublogCheck() ?      "  - Upload park log to " . PS::BLUE_BD . "QRZ.com" . PS::GREEN_BD . "\n" : "")
+            . ($this->sessionAdifDirectory ?"  - Save " . PS::BLUE_BD . "Session log file" . PS::GREEN_BD . "\n" : "")
             . "\n"
             . ($this->locationType === 'POTA' && $logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
 
