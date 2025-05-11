@@ -364,10 +364,6 @@ class PS {
         $processed = 0;
         $rateLimitExceeded = false;
         foreach ($data as &$record) {
-            if ($rateLimitExceeded) {
-                $stats['ERROR']++;
-                continue;
-            }
             if (isset($record['TO_CLUBLOG']) && $record['TO_CLUBLOG'] === 'Y') {
                 continue;
             }
@@ -376,6 +372,10 @@ class PS {
             }
             if ($this->modePushQty && strtolower($this->modePushQty) !== 'all' && $processed >= $this->modePushQty) {
                 break;
+            }
+            if ($rateLimitExceeded) {
+                $stats['ERROR']++;
+                continue;
             }
             $stats['ATTEMPTED']++;
             $adif = adif::toAdif([$record], $this->version, true, false);
