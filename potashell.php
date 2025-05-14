@@ -172,12 +172,12 @@ class PS {
         }
         $this->inputQthId =     $arg1;
         $this->inputGSQ =       $arg2;
-        $this->mode =           $arg3 ? strtoupper($arg3) : '';
-        $this->modeCheck =      $this->mode && $this->mode === 'CHECK';
-        $this->modePush =       $this->mode && $this->mode === 'PUSH';
-        $this->modeReview =     $this->mode && $this->mode === 'REVIEW';
-        $this->modeSpot =       $this->mode && $this->mode === 'SPOT';
-        $this->modeSummary =    $this->mode && $this->mode === 'SUMMARY';
+        $this->mode =           $arg3 ? $arg3 : '';
+        $this->modeCheck =      $this->mode && strtoupper($this->mode) === 'CHECK';
+        $this->modePush =       $this->mode && strtoupper($this->mode) === 'PUSH';
+        $this->modeReview =     $this->mode && strtoupper($this->mode) === 'REVIEW';
+        $this->modeSpot =       $this->mode && strtoupper($this->mode) === 'SPOT';
+        $this->modeSummary =    $this->mode && strtoupper($this->mode) === 'SUMMARY';
         if ($this->modeCheck || $this->modeReview || $this->modeSummary) {
             $this->argCheckBand = $arg4;
         }
@@ -889,8 +889,10 @@ class PS {
         $this->locationName =       $lookup['name'];
         $this->locationNameAbbr =   $lookup['abbr'];
         $this->locationType =       $lookup['type'];
-        print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . $this->inputGSQ . ' '
-            . PS::CYAN_BD . $this->inputQthId . ' ' . PS::GREEN_BD . strtoupper($this->mode) . ' ' . $this->modePushQty
+        print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell "
+            . PS::CYAN_BD . $this->inputQthId . ' '
+            . PS::BLUE_BD . $this->inputGSQ . ' '
+            . PS::GREEN_BD . $this->mode . ' ' . $this->modePushQty
             . PS::MAGENTA_BD . $this->argCheckBand . "\n"
             . PS::GREEN_BD . "  - Identified QTH:   " . PS::CYAN_BD . $this->locationName . "\n"
             . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->locationNameAbbr . "\n";
