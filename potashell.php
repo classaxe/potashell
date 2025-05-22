@@ -127,6 +127,10 @@ class PS {
         $this->internetCheck();
         $this->qrzCheck();
         $this->clublogCheck();
+        if ($this->modeAudit) {
+            print $this->processAudit();
+            return;
+        }
         if ($this->modeSyntax) {
             print $this->showSyntax();
             return;
@@ -791,21 +795,23 @@ class PS {
         }
     }
 
-    private function potaGetParkName($potaId) {
+    private function potaGetParkName($qthId) {
         if (!$this->hasInternet) {
+            $type = (substr($qthId, 0, 2) === 'XX' ? 'CUSTOM' : 'POTA');
             return [
-                'name' => $potaId,
-                'abbr' => 'POTA: ' . $potaId
+                'name' => $qthId,
+                'abbr' => $type . ': ' . $qthId,
+                'type' => $type
             ];
         }
-        $url = "https://api.pota.app/park/" . trim($potaId);
+        $url = "https://api.pota.app/park/" . trim($qthId);
         $data = file_get_contents($url, false, $this->HTTPcontext);
         $data = json_decode($data);
         if (!$data) {
             return false;
         }
         $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
-        $parkNameAbbr = strtr("POTA: " . $potaId . " " . $parkName, PS::NAME_SUBS);
+        $parkNameAbbr = strtr("POTA: " . $qthId . " " . $parkName, PS::NAME_SUBS);
         return [
             'abbr' => $parkNameAbbr,
             'name' => $parkName,
@@ -873,14 +879,10 @@ class PS {
 
     private function process() {
         print PS::YELLOW_BD . "STATUS:\n";
-        if (!$this->modeAudit && (!$this->inputQthId || !$this->inputGSQ)) {
+        if (!$this->inputQthId || !$this->inputGSQ) {
             print PS::RED_BD . "  - One or more required parameters are missing.\n"
                 . "    Unable to continue.\n" . PS::RESET . "\n";
             die(0);
-        }
-        if ($this->modeAudit) {
-            $this->processAudit();
-            return;
         }
         if (!$lookup = $this->getLocationName($this->inputQthId)) {
             print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputQthId}.\n" . PS::RESET . "\n";
@@ -959,12 +961,13 @@ class PS {
     }
 
     private function processAudit() {
-        print PS::GREEN_BD . "Performing Audit on all POTA Log files in "
+        $out = PS::YELLOW_BD . "STATUS:\n"
+            . PS::GREEN_BD . "Performing Audit on all POTA Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
         if (!$files) {
-            print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
-            return;
+            $out .= PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
+            return $out;
         }
         $columns = str_replace(
             "|",
@@ -972,7 +975,7 @@ class PS {
             "QTH ID   | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD | Park Name in Log File"
         );
 
-        print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
+        $out .= PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
             . "  " . PS::CYAN_BD . "#LT" . PS::GREEN_BD . " =    Logs in total - excluding duplicates\n"
             . "  " . PS::CYAN_BD . "#ST" . PS::GREEN_BD . " =    Sessions in Total\n"
             . "  " . PS::CYAN_BD . "#SA" . PS::GREEN_BD . " =    Successful Activations\n"
@@ -1014,7 +1017,7 @@ class PS {
                 $B =        static::dataCountBands($data);
                 $DX =       number_format(static::dataGetBestDx($data));
 
-                print
+                $out .=
                     PS::BLUE_BD . str_pad($qthId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
                         PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
@@ -1027,7 +1030,7 @@ class PS {
                     . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                     . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
 
-                    . ($LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
+                    . ($lookup['type'] === 'POTA' && $LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                     . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
                     . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' |  ' . PS::YELLOW
                     . (static::dataCountUploadType($data, 'TO_CLUBLOG') === count($data) ? 'C' : ' ') . ' '
@@ -1037,7 +1040,8 @@ class PS {
                     . "\n";
             }
         }
-        print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
+        $out .= str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
+        return $out;
     }
 
     private function processParkArchiving() {
@@ -1170,8 +1174,8 @@ class PS {
             . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
             . static::showStats($data, $date, $band)
             . ($showLogs ? static::showLogs($data, $date, $band) : "")
-            . ($logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
-            . ($logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
+            . ($this->locationType === 'POTA' && $logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
+            . ($this->locationType === 'POTA' && $logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
             . (count($locs) > 1 ?
                 print PS::RED_BD ."\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
                     . "    - " .implode("\n    - ", $locs) . "\n  * The operation has been cancelled.\n"
