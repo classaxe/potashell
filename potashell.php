@@ -1825,14 +1825,17 @@ class PS {
         $newMyCall =    'MyCall=' . $call;
         $oldMyGrid =    'MyGrid=' . $wsjtxIniConfig['Configuration']['MyGrid'];
         $newMyGrid =    'MyGrid=' . substr($gsq, 0, 6);
+        $oldComment =   'LogComments=' . $wsjtxIniConfig['LogQSO']['LogComments'];
+        $newComment =   'LogComments=';
 
         if ($oldMyCall === $newMyCall && $oldMyGrid === $newMyGrid) {
             return;
         }
 
         $str = file_get_contents($filename);
-        $str = str_replace($oldMyCall, $newMyCall, $str);
-        $str = str_replace($oldMyGrid, $newMyGrid, $str);
+        $str = str_replace($oldMyCall, $newMyCall, $str);   // Set My Callsign
+        $str = str_replace($oldMyGrid, $newMyGrid, $str);   // Set my GSQ
+        $str = str_replace($oldComment, $newComment, $str); // Fix issue with old comments persisting
         file_put_contents($filename, $str);
     }
 
