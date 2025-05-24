@@ -128,7 +128,7 @@ class PS {
         $this->qrzCheck();
         $this->clublogCheck();
         if ($this->modeAudit) {
-            print $this->processAudit();
+            $this->processAudit();  // Method processAudit() prints directly for gradula display of results
             return;
         }
         if ($this->modeSyntax) {
@@ -961,13 +961,13 @@ class PS {
     }
 
     private function processAudit() {
-        $out = PS::YELLOW_BD . "STATUS:\n"
+        print PS::YELLOW_BD . "STATUS:\n"
             . PS::GREEN_BD . "Performing Audit on all POTA Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
         if (!$files) {
-            $out .= PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
-            return $out;
+            print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
+            return;
         }
         $columns = str_replace(
             "|",
@@ -975,7 +975,7 @@ class PS {
             "QTH ID   | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD | Park Name in Log File"
         );
 
-        $out .= PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
+        print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
             . "  " . PS::CYAN_BD . "#LT" . PS::GREEN_BD . " =    Logs in total - excluding duplicates\n"
             . "  " . PS::CYAN_BD . "#ST" . PS::GREEN_BD . " =    Sessions in Total\n"
             . "  " . PS::CYAN_BD . "#SA" . PS::GREEN_BD . " =    Successful Activations\n"
@@ -991,7 +991,6 @@ class PS {
             . str_repeat('-', PS::MAXLEN) . "\n"
             .  PS::CYAN_BD . $columns . PS::GREEN_BD . "\n"
             . str_repeat('-', PS::MAXLEN) . "\n";
-        $i = 0;
         foreach ($files as $file) {
             if (is_file($file)) {
                 // if ($i++ > 4) { continue; }  // For development testing
@@ -1017,8 +1016,7 @@ class PS {
                 $B =        static::dataCountBands($data);
                 $DX =       number_format(static::dataGetBestDx($data));
 
-                $out .=
-                    PS::BLUE_BD . str_pad($qthId, 8, ' ') . PS::GREEN_BD . " | "
+                print PS::BLUE_BD . str_pad($qthId, 8, ' ') . PS::GREEN_BD . " | "
                     . (count($MY_GRID) === 1 ?
                         PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
                         PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
@@ -1040,8 +1038,7 @@ class PS {
                     . "\n";
             }
         }
-        $out .= str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
-        return $out;
+        print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
     }
 
     private function processParkArchiving() {
@@ -1828,7 +1825,7 @@ class PS {
         $oldComment =   'LogComments=' . $wsjtxIniConfig['LogQSO']['LogComments'];
         $newComment =   'LogComments=';
 
-        if ($oldMyCall === $newMyCall && $oldMyGrid === $newMyGrid) {
+        if ($oldMyCall === $newMyCall && $oldMyGrid === $newMyGrid && $oldComment === $newComment) {
             return;
         }
 
