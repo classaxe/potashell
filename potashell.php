@@ -366,7 +366,7 @@ class PS {
             'LAST_ERROR' => ''
         ];
         $processed = 0;
-        $rateLimitExceeded = false;
+        $halt = false;
         foreach ($data as &$record) {
             if (isset($record['TO_CLUBLOG']) && $record['TO_CLUBLOG'] === 'Y') {
                 continue;
@@ -377,7 +377,7 @@ class PS {
             if ($this->modePushQty && strtolower($this->modePushQty) !== 'all' && $processed >= $this->modePushQty) {
                 break;
             }
-            if ($rateLimitExceeded) {
+            if ($halt) {
                 $stats['ERROR']++;
                 continue;
             }
@@ -401,6 +401,7 @@ class PS {
                 curl_setopt($curl, CURLOPT_POST, true);
                 curl_setopt($curl, CURLOPT_POSTFIELDS, $args);
                 $result = curl_exec($curl);
+                $httpstatus = curl_getinfo($curl, CURLINFO_HTTP_CODE);
                 curl_close($curl);
             } catch (\Exception $e) {
                 print PS::RED_BD . "ERROR:\n  Unable to connect to Clublog.com for log uploads:" . PS::BLUE_BD . $e->getMessage() . PS::RED_BD  .".\n\n" . PS::RESET;
@@ -421,9 +422,14 @@ class PS {
                     break;
                 default:
                     $stats['ERROR']++;
-                    $stats['LAST_ERROR'] = $result;
+                    if ($result) {
+                        $stats['LAST_ERROR'] = $result;
+                    } else {
+                        $stats['LAST_ERROR'] = "HTTP Status {$httpstatus} was received from server";
+                        $halt = true;
+                    }
                     if (strpos($result, "Excessive realtime API usage") !== false) {
-                        $rateLimitExceeded = true;
+                        $halt = true;
                     }
                     break;
             }
