@@ -1,7 +1,7 @@
 #!/usr/bin/php
 <?php
 /*****************************************
- * POTA SHELL         Copyright (C) 2024 *
+ * POTA SHELL    Copyright (C) 2024-2005 *
  * Authors:        Martin Francis VA3PHP *
  *                          James Fraser *
  * --------------------------------------*
@@ -910,8 +910,6 @@ class PS {
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
 
-        PS::wsjtxUpdateInifile($this->qrzApiCallsign, $this->inputGSQ);
-
         if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeCheck) {
             $this->processParkCheck(false, true);
             return;
@@ -1150,6 +1148,8 @@ class PS {
             }
         }
 
+        PS::wsjtxUpdateInifile($this->qrzApiCallsign, $this->inputGSQ);
+
         print PS::YELLOW_BD . "\nNEXT STEP:\n" . PS::GREEN_BD
             . "  - You should now restart WSJT-X before logging at another park, where\n"
             . "    a fresh " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " file will be created.\n"
@@ -1260,6 +1260,8 @@ class PS {
     }
 
     private function processParkInitialise() {
+        PS::wsjtxUpdateInifile($this->qrzApiCallsign, $this->inputGSQ);
+
         print PS::GREEN_BD . "  - This is a first time visit, since neither " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
             . " nor " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " exist.\n\n";
 
@@ -1284,6 +1286,8 @@ class PS {
     }
 
     private function processParkUnarchiving() {
+        PS::wsjtxUpdateInifile($this->qrzApiCallsign, $this->inputGSQ);
+
         $adif = new adif($this->pathAdifLocal . $this->fileAdifPark);
         $data = $adif->parser();
         $locs =     $this->dataGetLocations($data);
