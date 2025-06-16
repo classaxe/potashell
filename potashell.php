@@ -8,7 +8,8 @@
  * https://github.com/classaxe/potashell *
  *****************************************/
 class PS {
-    const ACTIVATION_LOGS = 10;
+    const ACTIVATION_LOGS_POTA = 10;
+    const ACTIVATION_LOGS_WWFF = 44;
     const ADI_COLUMNS = [
         'QSO_DATE',
         'TIME_ON',
@@ -35,6 +36,7 @@ class PS {
         'TO_CLUBLOG',
         'TO_QRZ',
         'TO_POTA',
+        'TO_WWFF'
     ];
     const MAXLEN = 130;
 
@@ -94,6 +96,7 @@ class PS {
     private $modeAudit;
     private $modeCheck;
     private $modeHelp;
+    private $modeInvalid;
     private $modePush;
     private $modePushQty;
     private $modeReview;
@@ -103,7 +106,7 @@ class PS {
     private $HTTPcontext;
     private $locationName;
     private $locationNameAbbr;
-    private $locationType;
+    private $locationProgram;
     private $pathAdifLocal;
     private $php;
     private $sessionAdifDirectory;
@@ -177,11 +180,28 @@ class PS {
         $this->inputQthId =     $arg1;
         $this->inputGSQ =       $arg2;
         $this->mode =           $arg3 ? $arg3 : '';
-        $this->modeCheck =      $this->mode && strtoupper($this->mode) === 'CHECK';
-        $this->modePush =       $this->mode && strtoupper($this->mode) === 'PUSH';
-        $this->modeReview =     $this->mode && strtoupper($this->mode) === 'REVIEW';
-        $this->modeSpot =       $this->mode && strtoupper($this->mode) === 'SPOT';
-        $this->modeSummary =    $this->mode && strtoupper($this->mode) === 'SUMMARY';
+        switch(strtoupper($this->mode)) {
+            case '':
+                break;
+            case 'CHECK':
+                $this->modeCheck = true;
+                break;
+            case 'PUSH':
+                $this->modePush = true;
+                break;
+            case 'REVIEW':
+                $this->modeReview = true;
+                break;
+            case 'SPOT':
+                $this->modeSpot = true;
+                break;
+            case 'SUMMARY':
+                $this->modeSummary = true;
+                break;
+            default:
+                $this->modeInvalid = true;
+                break;
+        }
         if ($this->modeCheck || $this->modeReview || $this->modeSummary) {
             $this->argCheckBand = $arg4;
         }
@@ -759,9 +779,9 @@ class PS {
                 $locationBits = explode('|', $location);
                 if ($locationBits[0] === $qthID) {
                     return [
-                        'abbr' => $locationBits[1],
-                        'name' => $qthID,
-                        'type' => 'CUSTOM'
+                        'abbr' =>       $locationBits[1],
+                        'name' =>       $qthID,
+                        'program' =>    'CUSTOM'
                     ];
                 }
             }
@@ -783,35 +803,18 @@ class PS {
         }
         $this->hasInternet = true;
     }
-    private function phpCheck() {
-        $libs = [
-            'curl',
-            'mbstring',
-            'openssl'
-        ];
-        $msg = "\n" . PS::RED_BD . "ERROR:\n" . PS::GREEN_BD . "  PHP " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . " extension is not available.\n"
-            . PS::GREEN_BD ."  PHP version " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . ", "
-            . "php.ini file: " . PS::YELLOW_BD . "%s\n"
-            . PS::RESET;
-        foreach ($libs as $lib) {
-            if (!extension_loaded($lib)) {
-                print sprintf($msg, $lib, phpversion(),(php_ini_loaded_file() ? php_ini_loaded_file() : "None"));
-                die(0);
-            }
-        }
-    }
 
     private function parkGetInfo($qthId) {
         if (!$this->hasInternet) {
             if (substr($qthId, 0, 2) === 'XX') {
-                $type = "CUSTOM";
+                $program = "CUSTOM";
             } else {
-                $type = substr($qthId, 0, 4);
+                $program = substr($qthId, 0, 4);
             }
             return [
                 'name' =>           $qthId,
-                'abbr' =>           $type . ': ' . $qthId,
-                'type' =>           $type,
+                'abbr' =>           $program . ': ' . $qthId,
+                'program' =>        $program,
                 'alt_program' =>    '',
                 'alt_ref' =>        '',
             ];
@@ -828,10 +831,28 @@ class PS {
         return [
             'abbr' =>           $parkNameAbbr,
             'name' =>           $parkName,
-            'type' =>           $data->program,
+            'program' =>        $data->program,
             'alt_program' =>    $data->alt_program,
             'alt_ref' =>        $data->alt_ref,
         ];
+    }
+
+    private function phpCheck() {
+        $libs = [
+            'curl',
+            'mbstring',
+            'openssl'
+        ];
+        $msg = "\n" . PS::RED_BD . "ERROR:\n" . PS::GREEN_BD . "  PHP " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . " extension is not available.\n"
+            . PS::GREEN_BD ."  PHP version " . PS::YELLOW_BD . "%s" . PS::GREEN_BD . ", "
+            . "php.ini file: " . PS::YELLOW_BD . "%s\n"
+            . PS::RESET;
+        foreach ($libs as $lib) {
+            if (!extension_loaded($lib)) {
+                print sprintf($msg, $lib, phpversion(),(php_ini_loaded_file() ? php_ini_loaded_file() : "None"));
+                die(0);
+            }
+        }
     }
 
     private function potaPublishSpot() {
@@ -862,7 +883,7 @@ class PS {
         if (!$this->sessionAdifDirectory) {
             return '';
         }
-        $filename = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . $this->locationType . "_" . $this->inputQthId . ".adi";
+        $filename = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . $this->locationProgram . "_" . $this->inputQthId . ".adi";
         $export = [];
         foreach ($data as &$record) {
             if ($record['TO_POTA'] === 'Y') {
@@ -905,7 +926,7 @@ class PS {
         }
         $this->locationName =       $lookup['name'];
         $this->locationNameAbbr =   $lookup['abbr'];
-        $this->locationType =       $lookup['type'];
+        $this->locationProgram =       $lookup['program'];
         print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell "
             . PS::CYAN_BD . $this->inputQthId . ' '
             . PS::BLUE_BD . $this->inputGSQ . ' '
@@ -918,6 +939,11 @@ class PS {
 
         $fileAdifParkExists =   file_exists($this->pathAdifLocal . $this->fileAdifPark);
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
+
+        if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeInvalid) {
+            print PS::RED_BD . "\nERROR:\nUnknown mode " . $this->mode . PS::RESET . "\n";
+            return;
+        }
 
         if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeCheck) {
             $this->processParkCheck(false, true);
@@ -939,7 +965,7 @@ class PS {
             return;
         }
 
-        if ($this->modeSpot && $this->locationType === 'POTA') {
+        if ($this->modeSpot && $this->locationProgram === 'POTA') {
             $this->processParkSpot();
             return;
         }
@@ -985,7 +1011,7 @@ class PS {
         $columns = str_replace(
             "|",
             PS::GREEN_BD . "|" . PS::CYAN_BD,
-            "QTH ID   | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD | Park Name in Log File"
+            "QTH ID   | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD  | Park Name in Log File"
         );
 
         print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
@@ -994,12 +1020,15 @@ class PS {
             . "  " . PS::CYAN_BD . "#SA" . PS::GREEN_BD . " =    Successful Activations\n"
             . "  " . PS::CYAN_BD . "#FA" . PS::GREEN_BD . " =    Failed Activations\n"
             . "  " . PS::CYAN_BD . "#MG" . PS::GREEN_BD . " =    Missing Grid Squares\n"
-            . "  " . PS::CYAN_BD . "#LS" . PS::GREEN_BD . " =    Logs for latest session - excluding duplicates. " . PS::ACTIVATION_LOGS . " required for activation.\n"
+            . "  " . PS::CYAN_BD . "#LS" . PS::GREEN_BD . " =    Unique logs for latest session - "
+            . PS::RED_BD . PS::ACTIVATION_LOGS_POTA . PS::GREEN_BD . " required for POTA activation, "
+            . PS::RED_BD . PS::ACTIVATION_LOGS_WWFF . PS::GREEN_BD . " required for WWFF activation\n"
             . "  " . PS::CYAN_BD . "#B" . PS::GREEN_BD . "  =    Number of bands\n"
             . "  " . PS::CYAN_BD . "UPLOAD" . PS::GREEN_BD . " = Uploaded logs to "
             . PS::YELLOW . "C" . PS::GREEN_BD . "-Clublog, "
             . PS::YELLOW . "Q" . PS::GREEN_BD . "-QRZ, "
-            . PS::YELLOW . "X" . PS::GREEN_BD . "-eXport file for session\n"
+            . PS::YELLOW . "P" . PS::GREEN_BD . "-POTA session export file, "
+            . PS::YELLOW . "W" . PS::GREEN_BD . "-WWFF session export file\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', PS::MAXLEN) . "\n"
             .  PS::CYAN_BD . $columns . PS::GREEN_BD . "\n"
@@ -1041,12 +1070,17 @@ class PS {
                     . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                     . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
 
-                    . ($lookup['type'] === 'POTA' && $LS < PS::ACTIVATION_LOGS ? PS::RED_BD : '') . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
+                    . (
+                        ($lookup['program'] === 'POTA' && $LS < PS::ACTIVATION_LOGS_POTA) ||
+                        ($lookup['program'] === 'WWFF' && $LS < PS::ACTIVATION_LOGS_WWFF)
+                      ? PS::RED_BD : '')
+                    . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                     . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
-                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' |  ' . PS::YELLOW
+                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | ' . PS::YELLOW
                     . (static::dataCountUploadType($data, 'TO_CLUBLOG') === count($data) ? 'C' : ' ') . ' '
                     . (static::dataCountUploadType($data, 'TO_QRZ') === count($data) ? 'Q' : ' ') . ' '
-                    . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'X' : ' ') . PS::GREEN_BD . ' | '
+                    . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . PS::GREEN_BD . ' '
+                    . (static::dataCountUploadType($data, 'TO_WWFF') === count($data) ? 'W' : ' ') . PS::GREEN_BD . ' | '
                     . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . 'Lookup failed' . PS::GREEN_BD)
                     . "\n";
             }
@@ -1083,7 +1117,12 @@ class PS {
             . ($this->clublogCheck() ?      "  - Upload park log to " . PS::BLUE_BD . "QRZ.com" . PS::GREEN_BD . "\n" : "")
             . ($this->sessionAdifDirectory ?"  - Save " . PS::BLUE_BD . "Session log file" . PS::GREEN_BD . "\n" : "")
             . "\n"
-            . ($this->locationType === 'POTA' && $logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD : "");
+            . (
+                ($this->locationProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
+                ($this->locationProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF)
+                ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD
+                : ""
+            );
 
         if (isset($locs[0]) && trim(substr($locs[0], 0, 14)) !== trim(substr($this->locationNameAbbr, 0, 14))) {
             print PS::RED_BD . "ERROR:\n"
@@ -1139,7 +1178,7 @@ class PS {
             . $resQrz
             . $resPota
             . "\n";
-        if ($this->locationType === 'POTA') {
+        if ($this->locationProgram === 'POTA') {
             print PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
                 . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
 
@@ -1186,8 +1225,17 @@ class PS {
             . ($MGs ? "  - There are " . PS::RED_BD . $MGs . PS::GREEN_BD . " missing gridsquares\n" : "")
             . static::showStats($data, $date, $band)
             . ($showLogs ? static::showLogs($data, $date, $band) : "")
-            . ($this->locationType === 'POTA' && $logs < PS::ACTIVATION_LOGS || count($locs) > 1 ? PS::RED_BD ."\nWARNING:\n" : '')
-            . ($this->locationType === 'POTA' && $logs < PS::ACTIVATION_LOGS ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : '')
+            . (
+                ($this->locationProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
+                ($this->locationProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF) ||
+                count($locs) > 1
+                ? PS::RED_BD ."\nWARNING:\n" : ''
+            )
+            . (
+                ($this->locationProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
+                ($this->locationProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF)
+                ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : ''
+            )
             . (count($locs) > 1 ?
                 print PS::RED_BD ."\nERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
                     . "    - " .implode("\n    - ", $locs) . "\n  * The operation has been cancelled.\n"
@@ -1274,7 +1322,7 @@ class PS {
         print PS::GREEN_BD . "  - This is a first time visit, since neither " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
             . " nor " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " exist.\n\n";
 
-        if ($this->locationType === 'POTA') {
+        if ($this->locationProgram === 'POTA') {
             print PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
                 . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
             $fin = fopen("php://stdin","r");
@@ -1328,7 +1376,7 @@ class PS {
             );
             print "    Renamed archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
                 . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}" . PS::GREEN_BD . "\n\n";
-            if ($this->locationType === 'POTA') {
+            if ($this->locationProgram === 'POTA') {
                 print PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
                     . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
                 $fin = fopen("php://stdin", "r");
@@ -1679,7 +1727,7 @@ class PS {
             ['label' => 'COUNTRY',  'src' => 'COUNTRY',          'len' => 7],
             ['label' => 'GSQ',      'src' => 'GRIDSQUARE',       'len' => 3],
             ['label' => 'KM',       'src' => 'DX',               'len' => 3],
-            ['label' => 'UPLOAD',   'src' => '_',                'len' => 6],
+            ['label' => 'UPLOAD',   'src' => '_',                'len' => 7],
         ];
         foreach ($logs as $log) {
             foreach ($columns as &$column) {
@@ -1711,10 +1759,11 @@ class PS {
                 }
                 switch($column['src']) {
                     case '_':
-                        $row[] = ' ' . PS::YELLOW
+                        $row[] = PS::YELLOW
                             . (isset($log['TO_CLUBLOG']) ? ($log['TO_CLUBLOG'] === 'Y' ? 'C' : ' ') : ' ') . ' '
                             . (isset($log['TO_QRZ']) ?     ($log['TO_QRZ'] === 'Y' ?     'Q' : ' ') : ' ') . ' '
-                            . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'X' : ' ') : ' ') . ' '
+                            . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'P' : ' ') : ' ') . ' '
+                            . (isset($log['TO_WWFF']) ?    ($log['TO_WWFF'] === 'Y' ?    'W' : ' ') : ' ') . ' '
                             . PS::GREEN;
                         break;
                     case 'DX':
@@ -1732,7 +1781,8 @@ class PS {
             . PS::CYAN_BD . "UPLOAD" . PS::GREEN . " = Uploaded logs to "
             . PS::YELLOW . "C" . PS::GREEN . "-Clublog, "
             . PS::YELLOW . "Q" . PS::GREEN . "-QRZ, "
-            . PS::YELLOW . "X" . PS::GREEN . "-eXport file for session\n"
+            . PS::YELLOW . "P" . PS::GREEN . "-POTA File, "
+            . PS::YELLOW . "W" . PS::GREEN . "-WWFF File.\n"
             . str_repeat('-', strlen($head) + 1) . "\n"
             . $head_bd . "\n"
             . str_repeat('-', strlen($head) + 1) . "\n"
