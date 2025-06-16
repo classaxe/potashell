@@ -767,7 +767,7 @@ class PS {
             }
         }
 
-        return $this->potaGetParkName($qthID);
+        return $this->parkGetInfo($qthID);
     }
 
     private function internetCheck() {
@@ -801,27 +801,36 @@ class PS {
         }
     }
 
-    private function potaGetParkName($qthId) {
+    private function parkGetInfo($qthId) {
         if (!$this->hasInternet) {
-            $type = (substr($qthId, 0, 2) === 'XX' ? 'CUSTOM' : 'POTA');
+            if (substr($qthId, 0, 2) === 'XX') {
+                $type = "CUSTOM";
+            } else {
+                $type = substr($qthId, 0, 4);
+            }
             return [
-                'name' => $qthId,
-                'abbr' => $type . ': ' . $qthId,
-                'type' => $type
+                'name' =>           $qthId,
+                'abbr' =>           $type . ': ' . $qthId,
+                'type' =>           $type,
+                'alt_program' =>    '',
+                'alt_ref' =>        '',
             ];
         }
-        $url = "https://api.pota.app/park/" . trim($qthId);
+
+        $url = "https://logs.classaxe.com/park/" . trim($qthId);
         $data = file_get_contents($url, false, $this->HTTPcontext);
         $data = json_decode($data);
         if (!$data) {
             return false;
         }
-        $parkName = trim($data->name) . ' ' . trim($data->parktypeDesc);
-        $parkNameAbbr = strtr("POTA: " . $qthId . " " . $parkName, PS::NAME_SUBS);
+        $parkName = trim($data->name);
+        $parkNameAbbr = strtr($data->program . ": " . $qthId . " " . $parkName, PS::NAME_SUBS);
         return [
-            'abbr' => $parkNameAbbr,
-            'name' => $parkName,
-            'type' => 'POTA'
+            'abbr' =>           $parkNameAbbr,
+            'name' =>           $parkName,
+            'type' =>           $data->program,
+            'alt_program' =>    $data->alt_program,
+            'alt_ref' =>        $data->alt_ref,
         ];
     }
 
