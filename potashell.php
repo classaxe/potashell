@@ -794,7 +794,7 @@ class PS {
                     return [
                         'abbr' =>           $locationBits[1],
                         'name' =>           $qthID,
-                        'loc_id' =>         $location,
+                        'loc_id' =>         $qthID,
                         'program' =>        'CUSTOM',
                         'alt_program' =>    '',
                         'alt_loc_id' =>     '',
@@ -1122,6 +1122,8 @@ class PS {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." . PS::RESET . "\n";
             return;
         }
+        print "\n";
+        $migrated = 0;
         foreach ($files as $i => $file) {
             if (!is_file($file)) {
                 continue;
@@ -1135,6 +1137,9 @@ class PS {
 
             $adif = new adif($file);
             $data = $adif->parser();
+            if (isset($data[0]['PROGRAM'])) {
+                continue;
+            }
             foreach ($data as &$entry) {
                 $entry['LOC_ID'] = $lookup['loc_id'];
                 $entry['PROGRAM'] = $lookup['program'];
@@ -1144,7 +1149,8 @@ class PS {
             $data = $this->dataSetColumnOrder($data);
             $adif =     $adif->toAdif($data, $this->version, false, true);
             file_put_contents($file, $adif);
-            print $fn . " " . count($data) . print_r($lookup, true) . "\n";
+            $migrated++;
+            print "  " . PS::BLUE_BD . str_pad($migrated, 3, ' ', STR_PAD_LEFT) . ". " . PS::YELLOW_BD . $fn . PS::GREEN_BD . " migrated\n";
         }
         print PS::RESET;
     }
