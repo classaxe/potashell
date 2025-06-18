@@ -27,7 +27,10 @@ class PS {
         'QSO_DATE_OFF',
         'TIME_OFF',
         'STATION_CALLSIGN',
-        'PARK',
+        'PROGRAM',
+        'LOC_ID',
+        'ALT_PROGRAM',
+        'ALT_LOC_ID',
         'MY_CITY',
         'MY_GRIDSQUARE',
         'TX_PWR',
@@ -97,6 +100,7 @@ class PS {
     private $modeCheck;
     private $modeHelp;
     private $modeInvalid;
+    private $modeMigrate;
     private $modePush;
     private $modePushQty;
     private $modeReview;
@@ -131,20 +135,24 @@ class PS {
         $this->qrzCheck();
         $this->clublogCheck();
         if ($this->modeAudit) {
-            $this->processAudit();  // Method processAudit() prints directly for gradula display of results
-            return;
-        }
-        if ($this->modeSyntax) {
-            print $this->showSyntax();
+            $this->processAudit();
             return;
         }
         if ($this->modeHelp) {
             $this->showHelp();
             return;
         }
+        if ($this->modeMigrate) {
+            $this->processMigrate();
+            return;
+        }
         if (!$this->modeAudit && $this->inputGSQ === null) {
             print $this->showSyntax();
             $this->argsGetInput();
+        }
+        if ($this->modeSyntax) {
+            print $this->showSyntax();
+            return;
         }
         $this->process();
     }
@@ -159,6 +167,7 @@ class PS {
         $this->modeAudit = false;
         $this->modeCheck = false;
         $this->modeHelp = false;
+        $this->modeMigrate = false;
         $this->modePush = false;
         $this->modePushQty = false;
         $this->modeReview = false;
@@ -171,6 +180,10 @@ class PS {
         }
         if ($arg1 && strtoupper($arg1) === 'HELP') {
             $this->modeHelp = true;
+            return;
+        }
+        if ($arg1 && strtoupper($arg1) === 'MIGRATE') {
+            $this->modeMigrate = true;
             return;
         }
         if ($arg1 && strtoupper($arg1) === 'SYNTAX') {
@@ -531,7 +544,7 @@ class PS {
             }
             $record['MY_GRIDSQUARE'] =  $this->inputGSQ;
             $record['MY_CITY'] =        $this->locationNameAbbr;
-            $record['PARK'] =           $this->inputQthId;
+            $record['LOC_ID'] =         $this->inputQthId;
             $record['MODECOMP'] = ($record['MODE'] === 'MFSK' && $record['SUBMODE'] === 'FT4' ? 'FT4' : $record['MODE']);
             $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
             $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
@@ -773,15 +786,18 @@ class PS {
         ]);
     }
 
-    private function getLocationName($qthID) {
+    private function getLocationDetails($qthID) {
         if (!empty($this->customLocations)) {
             foreach ($this->customLocations as $location) {
                 $locationBits = explode('|', $location);
                 if ($locationBits[0] === $qthID) {
                     return [
-                        'abbr' =>       $locationBits[1],
-                        'name' =>       $qthID,
-                        'program' =>    'CUSTOM'
+                        'abbr' =>           $locationBits[1],
+                        'name' =>           $qthID,
+                        'loc_id' =>         $location,
+                        'program' =>        'CUSTOM',
+                        'alt_program' =>    '',
+                        'alt_loc_id' =>     '',
                     ];
                 }
             }
@@ -814,9 +830,10 @@ class PS {
             return [
                 'name' =>           $qthId,
                 'abbr' =>           $program . ': ' . $qthId,
+                'loc_id' =>         $qthId,
                 'program' =>        $program,
                 'alt_program' =>    '',
-                'alt_ref' =>        '',
+                'alt_loc_id' =>     '',
             ];
         }
 
@@ -831,9 +848,10 @@ class PS {
         return [
             'abbr' =>           $parkNameAbbr,
             'name' =>           $parkName,
+            'loc_id' =>         $qthId,
             'program' =>        $data->program,
             'alt_program' =>    $data->alt_program,
-            'alt_ref' =>        $data->alt_ref,
+            'alt_loc_id' =>     $data->alt_ref,
         ];
     }
 
@@ -920,7 +938,7 @@ class PS {
                 . "    Unable to continue.\n" . PS::RESET . "\n";
             die(0);
         }
-        if (!$lookup = $this->getLocationName($this->inputQthId)) {
+        if (!$lookup = $this->getLocationDetails($this->inputQthId)) {
             print PS::RED_BD . "\nERROR:\n  Unable to get name for park {$this->inputQthId}.\n" . PS::RESET . "\n";
             die(0);
         }
@@ -1003,11 +1021,13 @@ class PS {
         print PS::YELLOW_BD . "STATUS:\n"
             . PS::GREEN_BD . "Performing Audit on all POTA Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
+
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
         if (!$files) {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
             return;
         }
+
         $columns = str_replace(
             "|",
             PS::GREEN_BD . "|" . PS::CYAN_BD,
@@ -1033,60 +1053,102 @@ class PS {
             . str_repeat('-', PS::MAXLEN) . "\n"
             .  PS::CYAN_BD . $columns . PS::GREEN_BD . "\n"
             . str_repeat('-', PS::MAXLEN) . "\n";
-        foreach ($files as $file) {
-            if (is_file($file)) {
-                // if ($i++ > 4) { continue; }  // For development testing
-                $fn =       basename($file);
-                $qthId =    explode('.', explode('_', $fn)[2])[0];
-                $lookup =   $this->getLocationName($qthId);
-
-                $adif =     new adif($file);
-                $data =     $adif->parser();
-                $MY_GRID =  PS::dataGetMyGrid($data);
-                if ($MY_GRID === false) {
-                    print PS::RED_BD . "ERROR - file " . $fn . " has no 'MY_GRIDSQUARE column\n";
-                    continue;
-                }
-                $dates =    static::dataGetDates($data);
-                $date =     end($dates);
-                $LS =       static::dataCountLogs($data, $date);
-                $LT =       static::dataCountLogs($data);
-                $MG =       static::dataCountMissingGsq($data);
-                $ST =       count($dates);
-                $AT =       static::dataCountActivations($data);
-                $FT =       $ST - $AT;
-                $B =        static::dataCountBands($data);
-                $DX =       number_format(static::dataGetBestDx($data));
-
-                print PS::BLUE_BD . str_pad($qthId, 8, ' ') . PS::GREEN_BD . " | "
-                    . (count($MY_GRID) === 1 ?
-                        PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
-                        PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
-                      ) . PS::GREEN_BD . " | "
-
-                    . str_pad($LT, 3, ' ', STR_PAD_LEFT) . ' | '
-                    . str_pad($ST, 3, ' ', STR_PAD_LEFT) . ' | '
-                    . str_pad($AT, 3, ' ', STR_PAD_LEFT) . ' | '
-                    . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
-                    . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
-
-                    . (
-                        ($lookup['program'] === 'POTA' && $LS < PS::ACTIVATION_LOGS_POTA) ||
-                        ($lookup['program'] === 'WWFF' && $LS < PS::ACTIVATION_LOGS_WWFF)
-                      ? PS::RED_BD : '')
-                    . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
-                    . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
-                    . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | ' . PS::YELLOW
-                    . (static::dataCountUploadType($data, 'TO_CLUBLOG') === count($data) ? 'C' : ' ') . ' '
-                    . (static::dataCountUploadType($data, 'TO_QRZ') === count($data) ? 'Q' : ' ') . ' '
-                    . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . PS::GREEN_BD . ' '
-                    . (static::dataCountUploadType($data, 'TO_WWFF') === count($data) ? 'W' : ' ') . PS::GREEN_BD . ' | '
-                    . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . 'Lookup failed' . PS::GREEN_BD)
-                    . "\n";
+        foreach ($files as $i => $file) {
+            if (!is_file($file)) {
+                continue;
             }
+            if ($i > 4) {
+//                continue;   // For development testing
+            }
+            $fn =       basename($file);
+            $qthId =    explode('.', explode('_', $fn)[2])[0];
+            $lookup =   $this->getLocationDetails($qthId);
+
+            $adif =     new adif($file);
+            $data =     $adif->parser();
+            $MY_GRID =  PS::dataGetMyGrid($data);
+            if ($MY_GRID === false) {
+                print PS::RED_BD . "ERROR - file " . $fn . " has no 'MY_GRIDSQUARE column\n";
+                continue;
+            }
+            $dates =    static::dataGetDates($data);
+            $date =     end($dates);
+            $LS =       static::dataCountLogs($data, $date);
+            $LT =       static::dataCountLogs($data);
+            $MG =       static::dataCountMissingGsq($data);
+            $ST =       count($dates);
+            $AT =       static::dataCountActivations($data);
+            $FT =       $ST - $AT;
+            $B =        static::dataCountBands($data);
+            $DX =       number_format(static::dataGetBestDx($data));
+
+            print PS::BLUE_BD . str_pad($qthId, 8, ' ') . PS::GREEN_BD . " | "
+                . (count($MY_GRID) === 1 ?
+                    PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
+                    PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
+                  ) . PS::GREEN_BD . " | "
+
+                . str_pad($LT, 3, ' ', STR_PAD_LEFT) . ' | '
+                . str_pad($ST, 3, ' ', STR_PAD_LEFT) . ' | '
+                . str_pad($AT, 3, ' ', STR_PAD_LEFT) . ' | '
+                . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
+                . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
+
+                . (
+                    ($lookup['program'] === 'POTA' && $LS < PS::ACTIVATION_LOGS_POTA) ||
+                    ($lookup['program'] === 'WWFF' && $LS < PS::ACTIVATION_LOGS_WWFF)
+                  ? PS::RED_BD : '')
+                . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
+                . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
+                . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | ' . PS::YELLOW
+                . (static::dataCountUploadType($data, 'TO_CLUBLOG') === count($data) ? 'C' : ' ') . ' '
+                . (static::dataCountUploadType($data, 'TO_QRZ') === count($data) ? 'Q' : ' ') . ' '
+                . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . PS::GREEN_BD . ' '
+                . (static::dataCountUploadType($data, 'TO_WWFF') === count($data) ? 'W' : ' ') . PS::GREEN_BD . ' | '
+                . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . 'Lookup failed' . PS::GREEN_BD)
+                . "\n";
         }
         print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
     }
+
+    private function processMigrate()
+    {
+        print PS::YELLOW_BD . "STATUS:\n"
+            . PS::GREEN_BD . "Performing Migration on all WWJT-X Log files requiring upgrade in "
+            . PS::BLUE_BD . $this->pathAdifLocal . "\n";
+
+        $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
+        if (!$files) {
+            print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." . PS::RESET . "\n";
+            return;
+        }
+        foreach ($files as $i => $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            if ($i + 1 > 4) {
+                // continue;    // For development testing
+            }
+            $fn = basename($file);
+            $qthId = explode('.', explode('_', $fn)[2])[0];
+            $lookup = $this->getLocationDetails($qthId);
+
+            $adif = new adif($file);
+            $data = $adif->parser();
+            foreach ($data as &$entry) {
+                $entry['LOC_ID'] = $lookup['loc_id'];
+                $entry['PROGRAM'] = $lookup['program'];
+                $entry['ALT_LOC_ID'] = $lookup['alt_loc_id'];
+                $entry['ALT_PROGRAM'] = $lookup['alt_program'];
+            }
+            $data = $this->dataSetColumnOrder($data);
+            $adif =     $adif->toAdif($data, $this->version, false, true);
+            file_put_contents($file, $adif);
+            print $fn . " " . count($data) . print_r($lookup, true) . "\n";
+        }
+        print PS::RESET;
+    }
+
 
     private function processParkArchiving() {
         $adif =     new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
@@ -1718,7 +1780,7 @@ class PS {
             ['label' => 'DATE',     'src' => 'QSO_DATE',         'len' => 4],
             ['label' => 'UTC',      'src' => 'TIME_ON',          'len' => 3],
             ['label' => 'YOU',      'src' => 'STATION_CALLSIGN', 'len' => 3],
-            ['label' => 'LOC ID',   'src' => 'PARK',             'len' => 4],
+            ['label' => 'LOC',      'src' => 'LOC_ID',           'len' => 3],
             ['label' => 'GSQ',      'src' => 'MY_GRIDSQUARE',    'len' => 3],
             ['label' => 'CALLSIGN', 'src' => 'CALL',             'len' => 8],
             ['label' => 'BAND',     'src' => 'BAND',             'len' => 4],
