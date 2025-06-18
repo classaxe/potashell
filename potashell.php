@@ -838,11 +838,11 @@ class PS {
         }
 
         $url = "https://logs.classaxe.com/park/" . trim($qthId);
-        $data = file_get_contents($url, false, $this->HTTPcontext);
-        $data = json_decode($data);
+        $data = @file_get_contents($url, false, $this->HTTPcontext);
         if (!$data) {
             return false;
         }
+        $data = json_decode($data);
         $parkName = trim($data->name);
         $parkNameAbbr = strtr($data->program . ": " . $qthId . " " . $parkName, PS::NAME_SUBS);
         return [
@@ -1123,7 +1123,7 @@ class PS {
             return;
         }
         print "\n";
-        $migrated = 0;
+        $count = 0;
         foreach ($files as $i => $file) {
             if (!is_file($file)) {
                 continue;
@@ -1131,13 +1131,21 @@ class PS {
             if ($i + 1 > 4) {
                 // continue;    // For development testing
             }
+            $count++;
             $fn = basename($file);
             $qthId = explode('.', explode('_', $fn)[2])[0];
             $lookup = $this->getLocationDetails($qthId);
+            if (!$lookup) {
+                print "  " . PS::BLUE_BD . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". "
+                    . PS::YELLOW_BD . $fn . PS::RED_BD . " NOT migrated - park data not found\n";
+                continue;
+            }
 
             $adif = new adif($file);
             $data = $adif->parser();
             if (isset($data[0]['PROGRAM'])) {
+                print "  " . PS::BLUE_BD . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". "
+                    . PS::YELLOW_BD . $fn . PS::GREEN_BD . " already migrated\n";
                 continue;
             }
             foreach ($data as &$entry) {
@@ -1149,8 +1157,8 @@ class PS {
             $data = $this->dataSetColumnOrder($data);
             $adif =     $adif->toAdif($data, $this->version, false, true);
             file_put_contents($file, $adif);
-            $migrated++;
-            print "  " . PS::BLUE_BD . str_pad($migrated, 3, ' ', STR_PAD_LEFT) . ". " . PS::YELLOW_BD . $fn . PS::GREEN_BD . " migrated\n";
+            print "  " . PS::BLUE_BD . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". "
+                . PS::YELLOW_BD . $fn . PS::GREEN_BD . " migrated\n";
         }
         print PS::RESET;
     }
