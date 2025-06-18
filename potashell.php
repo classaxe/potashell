@@ -1062,8 +1062,6 @@ class PS {
             }
             $fn =       basename($file);
             $qthId =    explode('.', explode('_', $fn)[2])[0];
-            $lookup =   $this->getLocationDetails($qthId);
-
             $adif =     new adif($file);
             $data =     $adif->parser();
             $MY_GRID =  PS::dataGetMyGrid($data);
@@ -1071,6 +1069,7 @@ class PS {
                 print PS::RED_BD . "ERROR - file " . $fn . " has no 'MY_GRIDSQUARE column\n";
                 continue;
             }
+
             $dates =    static::dataGetDates($data);
             $date =     end($dates);
             $LS =       static::dataCountLogs($data, $date);
@@ -1095,8 +1094,8 @@ class PS {
                 . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
 
                 . (
-                    ($lookup['program'] === 'POTA' && $LS < PS::ACTIVATION_LOGS_POTA) ||
-                    ($lookup['program'] === 'WWFF' && $LS < PS::ACTIVATION_LOGS_WWFF)
+                    ($data[0]['PROGRAM'] === 'POTA' && $LS < PS::ACTIVATION_LOGS_POTA) ||
+                    ($data[0]['PROGRAM'] === 'WWFF' && $LS < PS::ACTIVATION_LOGS_WWFF)
                   ? PS::RED_BD : '')
                 . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                 . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
@@ -1105,7 +1104,7 @@ class PS {
                 . (static::dataCountUploadType($data, 'TO_QRZ') === count($data) ? 'Q' : ' ') . ' '
                 . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . PS::GREEN_BD . ' '
                 . (static::dataCountUploadType($data, 'TO_WWFF') === count($data) ? 'W' : ' ') . PS::GREEN_BD . ' | '
-                . (isset($lookup['abbr']) ? PS::BLUE_BD . $lookup['abbr'] . PS::GREEN_BD : PS::RED_BD . 'Lookup failed' . PS::GREEN_BD)
+                . PS::BLUE_BD . $data[0]['MY_CITY'] . PS::GREEN_BD
                 . "\n";
         }
         print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
