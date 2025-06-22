@@ -41,7 +41,7 @@ class PS {
         'TO_POTA',
         'TO_WWFF'
     ];
-    const MAXLEN = 130;
+    const MAXLEN = 150;
 
     const USERAGENT =   "POTASHELL v%s | (C) %s VA3PHP";
     const RED =         "\e[0;31m";
@@ -1019,7 +1019,7 @@ class PS {
 
     private function processAudit() {
         print PS::YELLOW_BD . "STATUS:\n"
-            . PS::GREEN_BD . "Performing Audit on all POTA Log files in "
+            . PS::GREEN_BD . "Performing Audit on all location Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
 
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
@@ -1031,7 +1031,7 @@ class PS {
         $columns = str_replace(
             "|",
             PS::GREEN_BD . "|" . PS::CYAN_BD,
-            "QTH ID   | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD  | Park Name in Log File"
+            "QTH ID    | ALT ID    | MY_GRID    | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD  | Park Name in Log File"
         );
 
         print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
@@ -1081,7 +1081,8 @@ class PS {
             $B =        static::dataCountBands($data);
             $DX =       number_format(static::dataGetBestDx($data));
 
-            print PS::BLUE_BD . str_pad($qthId, 8, ' ') . PS::GREEN_BD . " | "
+            print PS::BLUE_BD . str_pad($qthId, 9, ' ') . PS::GREEN_BD . " | "
+                . PS::YELLOW_BD . str_pad($data[0]['ALT_LOC_ID'], 9, ' ') . PS::GREEN_BD . " | "
                 . (count($MY_GRID) === 1 ?
                     PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
                     PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
@@ -1102,8 +1103,9 @@ class PS {
                 . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | ' . PS::YELLOW
                 . (static::dataCountUploadType($data, 'TO_CLUBLOG') === count($data) ? 'C' : ' ') . ' '
                 . (static::dataCountUploadType($data, 'TO_QRZ') === count($data) ? 'Q' : ' ') . ' '
-                . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . PS::GREEN_BD . ' '
-                . (static::dataCountUploadType($data, 'TO_WWFF') === count($data) ? 'W' : ' ') . PS::GREEN_BD . ' | '
+                . (static::dataCountUploadType($data, 'TO_POTA') === count($data) ? 'P' : ' ') . ' '
+                . (static::dataCountUploadType($data, 'TO_WWFF') === count($data) ? 'W' : ' ')
+                . PS::GREEN_BD . ' | '
                 . PS::BLUE_BD . $data[0]['MY_CITY'] . PS::GREEN_BD
                 . "\n";
         }
