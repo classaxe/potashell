@@ -146,14 +146,15 @@ class PS {
             $this->processMigrate();
             return;
         }
-        if (!$this->modeAudit && $this->inputGSQ === null) {
-            print $this->showSyntax();
-            $this->argsGetInput();
-        }
         if ($this->modeSyntax) {
             print $this->showSyntax();
             return;
         }
+        if ($this->inputGSQ === null) {
+            print $this->showSyntax();
+            $this->argsGetInput();
+        }
+        // submodes check, review, spot, summary and push are all supported
         $this->process();
     }
 
@@ -855,6 +856,70 @@ class PS {
         ];
     }
 
+    private function parkSaveLogs(&$data) {
+        if (!$this->sessionAdifDirectory) {
+            return '';
+        }
+        if (!isset($data[0])) {
+            return '';
+        }
+        $potaLocId = ($data[0]['PROGRAM'] === 'POTA' ? $data[0]['LOC_ID'] : ($data[0]['ALT_PROGRAM'] === 'POTA' ? $data[0]['ALT_LOC_ID'] : ""));
+        $wwffLocId = ($data[0]['PROGRAM'] === 'WWFF' ? $data[0]['LOC_ID'] : ($data[0]['ALT_PROGRAM'] === 'WWFF' ? $data[0]['ALT_LOC_ID'] : ""));
+        $exportPota = [];
+        $exportWwff = [];
+        foreach ($data as &$record) {
+            if ($record['PROGRAM'] === 'POTA' || $record['ALT_PROGRAM'] === 'POTA') {
+                if ($record['TO_POTA'] !== 'Y') {
+                    $exportPota[] = $record;
+                    $record['TO_POTA'] = 'Y';
+                }
+            }
+            if ($record['PROGRAM'] === 'WWFF' || $record['ALT_PROGRAM'] === 'WWFF') {
+                if ($record['TO_WWFF'] !== 'Y') {
+                    $exportWwff[] = $record;
+                    $record['TO_WWFF'] = 'Y';
+                }
+            }
+        }
+        if (!empty($exportPota)) {
+            $filenamePota = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'POTA' . "_" . $potaLocId . ".adi";
+            if (file_exists($filenamePota)) {
+                print "Appending\n";
+                $adif =     new adif($filenamePota);
+                $complete = array_merge($adif->parser(), $exportPota);
+            } else {
+                print "Creating\n";
+                $adif =     new adif('');
+                $complete = $exportPota;
+            }
+            $adif =     $adif->toAdif($complete, $this->version, false, true);
+            file_put_contents($filenamePota, $adif);
+        }
+        if (!empty($exportWwff)) {
+            $filenameWwff = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'WWFF' . "_" . $wwffLocId . ".adi";
+            if (file_exists($filenameWwff)) {
+                print "Appending\n";
+                $adif =     new adif($filenameWwff);
+                $complete = array_merge($adif->parser(), $exportWwff);
+            } else {
+                print "Creating\n";
+                $adif =     new adif('');
+                $complete = $exportWwff;
+            }
+            $adif =     $adif->toAdif($complete, $this->version, false, true);
+            file_put_contents($filenameWwff, $adif);
+        }
+        return (count($exportPota) ? "  - Inserted " . PS::CYAN_BD . count($exportPota) . PS::GREEN_BD . " new POTA " . (count($exportPota) === 1 ? "log" : "logs")
+            . " in " . PS::YELLOW_BD . "Session export file\n"
+            . "      " . PS::CYAN_BD . $filenamePota . PS::GREEN_BD . "\n"
+            : "")
+            . (count($exportWwff) ?  "  - Inserted " . PS::CYAN_BD . count($exportWwff) . PS::GREEN_BD . " new WWFF" . (count($exportWwff) === 1 ? "log" : "logs")
+            . " in " . PS::YELLOW_BD . "Session export file\n"
+            . "      " . PS::CYAN_BD . $filenameWwff . PS::GREEN_BD . "\n"
+            : "");
+    }
+
+
     private function phpCheck() {
         $libs = [
             'curl',
@@ -895,40 +960,6 @@ class PS {
         $error = curl_error($ch);
         curl_close($ch);
         return $error ?: true;
-    }
-
-    private function potaSaveLogs(&$data) {
-        if (!$this->sessionAdifDirectory) {
-            return '';
-        }
-        $filename = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . $this->locationProgram . "_" . $this->inputQthId . ".adi";
-        $export = [];
-        foreach ($data as &$record) {
-            if ($record['TO_POTA'] === 'Y') {
-                continue;
-            }
-            $record['TO_POTA'] = 'Y';
-            $export[] = $record;
-        }
-        if (!empty($export)) {
-            $complete = [];
-            if (file_exists($filename)) {
-                print "Appending\n";
-                $adif =     new adif($filename);
-                $complete = array_merge($adif->parser(), $export);
-            } else {
-                print "Creating\n";
-                $adif =     new adif('');
-                $complete = $export;
-            }
-            $adif =     $adif->toAdif($complete, $this->version, false, true);
-            file_put_contents($filename, $adif);
-        }
-        return "  - Inserted " . PS::CYAN_BD . count($export) . PS::GREEN_BD . " new " . (count($export) === 1 ? "log" : "logs")
-            . " in " . PS::YELLOW_BD . "Session export file\n"
-            . "      " . PS::CYAN_BD . $filename . PS::GREEN_BD . "\n";
-
-//        $adif = adif::toAdif($export, $this->version, false, true);
     }
 
     private function process() {
@@ -1235,7 +1266,7 @@ class PS {
             $resQrz = $this->qrzUpload($data, $date);
         }
         if ($this->sessionAdifDirectory) {
-            $resPota = $this->potaSaveLogs($data);
+            $resPota = $this->parkSaveLogs($data);
         }
         $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
@@ -1351,11 +1382,11 @@ class PS {
             $resQrz = $this->qrzUpload($data, $date);
         }
         if ($this->sessionAdifDirectory) {
-            $resPota = $this->potaSaveLogs($data);
+            $resSave = $this->parkSaveLogs($data);
         }
         $adif = adif::toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        print $resCL . $resQrz . $resPota . "\n" . PS::RESET;
+        print $resCL . $resQrz . $resSave . "\n" . PS::RESET;
     }
 
     private function processParkSpot() {
