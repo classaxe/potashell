@@ -98,6 +98,7 @@ class PS {
     private $mode;
     private $modeAudit;
     private $modeCheck;
+    private $modeExport;
     private $modeHelp;
     private $modeInvalid;
     private $modeMigrate;
@@ -110,7 +111,10 @@ class PS {
     private $HTTPcontext;
     private $locationName;
     private $locationNameAbbr;
-    private $locationProgram;
+    private $lookupProgram;
+    private $lookupLocId;
+    private $lookupAltProgram;
+    private $lookupAltLocId;
     private $pathAdifLocal;
     private $php;
     private $sessionAdifDirectory;
@@ -142,6 +146,10 @@ class PS {
             $this->showHelp();
             return;
         }
+        if ($this->modeExport) {
+            $this->processExport();
+            return;
+        }
         if ($this->modeMigrate) {
             $this->processMigrate();
             return;
@@ -167,6 +175,7 @@ class PS {
         $arg5 = isset($argv[5]) ? $argv[5] : null;
         $this->modeAudit = false;
         $this->modeCheck = false;
+        $this->modeExport = false;
         $this->modeHelp = false;
         $this->modeMigrate = false;
         $this->modePush = false;
@@ -177,6 +186,10 @@ class PS {
         $this->modeSyntax = false;
         if ($arg1 && strtoupper($arg1) === 'AUDIT') {
             $this->modeAudit = true;
+            return;
+        }
+        if ($arg1 && strtoupper($arg1) === 'EXPORT') {
+            $this->modeExport = true;
             return;
         }
         if ($arg1 && strtoupper($arg1) === 'HELP') {
@@ -545,7 +558,10 @@ class PS {
             }
             $record['MY_GRIDSQUARE'] =  $this->inputGSQ;
             $record['MY_CITY'] =        $this->locationNameAbbr;
-            $record['LOC_ID'] =         $this->inputQthId;
+            $record['PROGRAM'] =        $this->lookupProgram;
+            $record['LOC_ID'] =         $this->lookupLocId;
+            $record['ALT_PROGRAM'] =    $this->lookupAltProgram;
+            $record['ALT_LOC_ID'] =     $this->lookupAltLocId;
             $record['MODECOMP'] = ($record['MODE'] === 'MFSK' && $record['SUBMODE'] === 'FT4' ? 'FT4' : $record['MODE']);
             $myLatLon =     static::convertGsqToDegrees( $record['MY_GRIDSQUARE']);
             $theirLatLon =  static::convertGsqToDegrees($record['GRIDSQUARE']);
@@ -884,11 +900,9 @@ class PS {
         if (!empty($exportPota)) {
             $filenamePota = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'POTA' . "_" . $potaLocId . ".adi";
             if (file_exists($filenamePota)) {
-                print "Appending\n";
                 $adif =     new adif($filenamePota);
                 $complete = array_merge($adif->parser(), $exportPota);
             } else {
-                print "Creating\n";
                 $adif =     new adif('');
                 $complete = $exportPota;
             }
@@ -975,14 +989,23 @@ class PS {
         }
         $this->locationName =       $lookup['name'];
         $this->locationNameAbbr =   $lookup['abbr'];
-        $this->locationProgram =       $lookup['program'];
+        $this->lookupProgram =      $lookup['program'];
+        $this->lookupLocId =        $lookup['loc_id'];
+        $this->lookupAltProgram =   $lookup['alt_program'];
+        $this->lookupAltLocId =     $lookup['alt_loc_id'];
         print PS::GREEN_BD . "  - Command:          " . PS::WHITE_BD . "potashell "
             . PS::CYAN_BD . $this->inputQthId . ' '
             . PS::BLUE_BD . $this->inputGSQ . ' '
             . PS::GREEN_BD . $this->mode . ' ' . $this->modePushQty
             . PS::MAGENTA_BD . $this->argCheckBand . "\n"
+            . PS::GREEN_BD . "  - Location Id:      " . PS::YELLOW_BD . $this->lookupProgram . ": " . $this->lookupLocId
+            . ($this->lookupAltProgram ?
+                PS::GREEN_BD . " / " . PS::YELLOW_BD . $this->lookupAltProgram . ": " . $this->lookupAltLocId
+                : ""
+            )
+            . "\n"
             . PS::GREEN_BD . "  - Identified QTH:   " . PS::CYAN_BD . $this->locationName . "\n"
-            . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->locationNameAbbr . "\n";
+            . PS::GREEN_BD . "  - Name for Log:     " . PS::CYAN_BD . $this->locationNameAbbr . "\n\n";
         $this->fileAdifPark =   "wsjtx_log_{$this->inputQthId}.adi";
         $this->fileAdifWsjtx =  "wsjtx_log.adi";
 
@@ -1014,7 +1037,7 @@ class PS {
             return;
         }
 
-        if ($this->modeSpot && $this->locationProgram === 'POTA') {
+        if ($this->modeSpot && $this->lookupProgram === 'POTA') {
             $this->processParkSpot();
             return;
         }
@@ -1095,6 +1118,15 @@ class PS {
             $qthId =    explode('.', explode('_', $fn)[2])[0];
             $adif =     new adif($file);
             $data =     $adif->parser();
+
+//            if (static::dataCountUploadType($data, 'TO_WWFF')) {
+//                foreach ($data as &$entry) {
+//                    $entry['to_WWFF'] = '';
+//                }
+//                $adif =     $adif->toAdif($data, $this->version, false, true);
+//                file_put_contents($file, $adif);
+//            }
+
             $MY_GRID =  PS::dataGetMyGrid($data);
             if ($MY_GRID === false) {
                 print PS::RED_BD . "ERROR - file " . $fn . " has no 'MY_GRIDSQUARE column\n";
@@ -1141,6 +1173,20 @@ class PS {
                 . "\n";
         }
         print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
+    }
+
+    private function processExport()
+    {
+        print PS::YELLOW_BD . "STATUS:\n"
+            . PS::GREEN_BD . "Performing Export to POTA and WWFF files for all location Log files in "
+            . PS::BLUE_BD . $this->pathAdifLocal . "\n";
+
+        $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
+        if (!$files) {
+            print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." . PS::RESET . "\n";
+            return;
+        }
+        print PS::RESET;
     }
 
     private function processMigrate()
@@ -1226,8 +1272,8 @@ class PS {
             . ($this->sessionAdifDirectory ?"  - Save " . PS::BLUE_BD . "Session log file" . PS::GREEN_BD . "\n" : "")
             . "\n"
             . (
-                ($this->locationProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
-                ($this->locationProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF)
+                ($this->lookupProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
+                ($this->lookupProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF)
                 ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD
                 : ""
             );
@@ -1286,7 +1332,7 @@ class PS {
             . $resQrz
             . $resPota
             . "\n";
-        if ($this->locationProgram === 'POTA') {
+        if ($this->lookupProgram === 'POTA') {
             print PS::YELLOW_BD . "CLOSE SPOT:\n" . PS::GREEN_BD
                 . "    Would you like to close this spot on pota.app (Y/N)     " . PS::BLUE_BD;
 
@@ -1334,14 +1380,14 @@ class PS {
             . static::showStats($data, $date, $band)
             . ($showLogs ? static::showLogs($data, $date, $band) : "")
             . (
-                ($this->locationProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
-                ($this->locationProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF) ||
+                ($this->lookupProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
+                ($this->lookupProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF) ||
                 count($locs) > 1
                 ? PS::RED_BD ."\nWARNING:\n" : ''
             )
             . (
-                ($this->locationProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
-                ($this->locationProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF)
+                ($this->lookupProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
+                ($this->lookupProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF)
                 ? PS::RED_BD ."  * There are insufficient logs for successful activation.\n" . PS::GREEN_BD : ''
             )
             . (count($locs) > 1 ?
@@ -1430,7 +1476,7 @@ class PS {
         print PS::GREEN_BD . "  - This is a first time visit, since neither " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
             . " nor " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::GREEN_BD . " exist.\n\n";
 
-        if ($this->locationProgram === 'POTA') {
+        if ($this->lookupProgram === 'POTA') {
             print PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
                 . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
             $fin = fopen("php://stdin","r");
@@ -1484,7 +1530,7 @@ class PS {
             );
             print "    Renamed archived log file " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::GREEN_BD
                 . " to " . PS::BLUE_BD ."{$this->fileAdifWsjtx}" . PS::GREEN_BD . "\n\n";
-            if ($this->locationProgram === 'POTA') {
+            if ($this->lookupProgram === 'POTA') {
                 print PS::YELLOW_BD . "PUBLISH SPOT:\n" . PS::GREEN_BD
                     . "    Would you like to publish this spot to pota.app (Y/N)   " . PS::BLUE_BD;
                 $fin = fopen("php://stdin", "r");
@@ -1931,15 +1977,15 @@ class PS {
               $header
             . $stats
             . (count($bands) ?
-                  "\n      - " . (count($bands) === 1 ?     "Band: " : "Bands:") . "      "
+                  "      - " . (count($bands) === 1 ?     "Band: " : "Bands:") . "      "
                   . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $bands) . PS::GREEN_BD . "\n"
                   : ""
               )
             . (count($countries) ?
-                  "\n      - " . (count($countries) === 1 ? "Country:  " : "Countries:") . "  "
+                  "      - " . (count($countries) === 1 ? "Country:  " : "Countries:") . "  "
                 . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $countries) . PS::GREEN_BD . "\n"
                 . (count($states) ?
-                      "\n      - " . (count($states) === 1 ? "State: ": "States:") . "     "
+                      "      - " . (count($states) === 1 ? "State: ": "States:") . "     "
                     . PS::YELLOW_BD . implode(PS::GREEN_BD . ', ' . PS::YELLOW_BD, $states) . PS::GREEN_BD . "\n"
                 : ""
                 )
