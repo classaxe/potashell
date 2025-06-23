@@ -919,7 +919,7 @@ class PS {
         }
         if (!empty($exportWwff)) {
             // Named according to https://www.veff.ca/rules - 6.6 - "callsign@reference YYYYMMDD"
-            $filenameWwff = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'WWFF_' . $callsign . '@' . $potaLocId . '_' . $lastDateWwff . '.adi';
+            $filenameWwff = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'WWFF_' . $callsign . '@' . $wwffLocId . '_' . $lastDateWwff . '.adi';
             if (file_exists($filenameWwff)) {
                 $adif =     new adif($filenameWwff);
                 $complete = array_merge($adif->parser(), $exportWwff);
