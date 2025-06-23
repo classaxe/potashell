@@ -884,6 +884,10 @@ class PS {
         $exportPota = [];
         $exportWwff = [];
         foreach ($data as &$record) {
+            if (!isset($record['TO_WWFF'])) {
+                print PS::RED_BD . "No TO_WWFF column in " . $data[0]['LOC_ID'] . "\n";
+                break;
+            }
             if ($record['PROGRAM'] === 'POTA' || $record['ALT_PROGRAM'] === 'POTA') {
                 if ($record['TO_POTA'] !== 'Y') {
                     $exportPota[] = $record;
@@ -912,24 +916,21 @@ class PS {
         if (!empty($exportWwff)) {
             $filenameWwff = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'WWFF' . "_" . $wwffLocId . ".adi";
             if (file_exists($filenameWwff)) {
-                print "Appending\n";
                 $adif =     new adif($filenameWwff);
                 $complete = array_merge($adif->parser(), $exportWwff);
             } else {
-                print "Creating\n";
                 $adif =     new adif('');
                 $complete = $exportWwff;
             }
             $adif =     $adif->toAdif($complete, $this->version, false, true);
             file_put_contents($filenameWwff, $adif);
         }
-        return (count($exportPota) ? "  - Inserted " . PS::CYAN_BD . count($exportPota) . PS::GREEN_BD . " new POTA " . (count($exportPota) === 1 ? "log" : "logs")
-            . " in " . PS::YELLOW_BD . "Session export file\n"
-            . "      " . PS::CYAN_BD . $filenamePota . PS::GREEN_BD . "\n"
+        return PS::GREEN_BD
+            . (count($exportPota) ? "  - Inserted " . PS::CYAN_BD . count($exportPota) . PS::GREEN_BD . " new POTA " . (count($exportPota) === 1 ? "log" : "logs")
+            . " in " . PS::YELLOW_BD . "Session export file " . PS::CYAN_BD . $filenamePota . PS::GREEN_BD . "\n"
             : "")
             . (count($exportWwff) ?  "  - Inserted " . PS::CYAN_BD . count($exportWwff) . PS::GREEN_BD . " new WWFF" . (count($exportWwff) === 1 ? "log" : "logs")
-            . " in " . PS::YELLOW_BD . "Session export file\n"
-            . "      " . PS::CYAN_BD . $filenameWwff . PS::GREEN_BD . "\n"
+            . " in " . PS::YELLOW_BD . "Session export file " . PS::CYAN_BD . $filenameWwff . PS::GREEN_BD . "\n"
             : "");
     }
 
@@ -1186,6 +1187,22 @@ class PS {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." . PS::RESET . "\n";
             return;
         }
+        foreach ($files as $i => $file) {
+            if (!is_file($file)) {
+                continue;
+            }
+            if ($i > 4) {
+                // continue;   // For development testing
+            }
+            $fn = basename($file);
+            $adif = new adif($file);
+            $data = $adif->parser();
+            print $this->parkSaveLogs($data);
+            $adif =     $adif->toAdif($data, $this->version, false, true);
+            file_put_contents($file, $adif);
+
+        }
+
         print PS::RESET;
     }
 
