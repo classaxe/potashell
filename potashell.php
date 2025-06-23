@@ -879,10 +879,11 @@ class PS {
         if (!isset($data[0])) {
             return '';
         }
-        $potaLocId = ($data[0]['PROGRAM'] === 'POTA' ? $data[0]['LOC_ID'] : ($data[0]['ALT_PROGRAM'] === 'POTA' ? $data[0]['ALT_LOC_ID'] : ""));
-        $wwffLocId = ($data[0]['PROGRAM'] === 'WWFF' ? $data[0]['LOC_ID'] : ($data[0]['ALT_PROGRAM'] === 'WWFF' ? $data[0]['ALT_LOC_ID'] : ""));
-        $exportPota = [];
-        $exportWwff = [];
+        $potaLocId =    ($data[0]['PROGRAM'] === 'POTA' ? $data[0]['LOC_ID'] : ($data[0]['ALT_PROGRAM'] === 'POTA' ? $data[0]['ALT_LOC_ID'] : ""));
+        $wwffLocId =    ($data[0]['PROGRAM'] === 'WWFF' ? $data[0]['LOC_ID'] : ($data[0]['ALT_PROGRAM'] === 'WWFF' ? $data[0]['ALT_LOC_ID'] : ""));
+        $callsign =     str_replace('/', '-', $data[0]['STATION_CALLSIGN']);
+        $exportPota =   [];
+        $exportWwff =   [];
         foreach ($data as &$record) {
             if (!isset($record['TO_WWFF'])) {
                 print PS::RED_BD . "No TO_WWFF column in " . $data[0]['LOC_ID'] . "\n";
@@ -892,17 +893,20 @@ class PS {
                 if ($record['TO_POTA'] !== 'Y') {
                     $exportPota[] = $record;
                     $record['TO_POTA'] = 'Y';
+                    $lastDatePota = $record['QSO_DATE'];
                 }
             }
             if ($record['PROGRAM'] === 'WWFF' || $record['ALT_PROGRAM'] === 'WWFF') {
                 if ($record['TO_WWFF'] !== 'Y') {
                     $exportWwff[] = $record;
                     $record['TO_WWFF'] = 'Y';
+                    $lastDateWwff = $record['QSO_DATE'];
                 }
             }
         }
         if (!empty($exportPota)) {
-            $filenamePota = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'POTA' . "_" . $potaLocId . ".adi";
+            // Named according to https://www.veff.ca/rules - 6.6 - "callsign@reference YYYYMMDD"
+            $filenamePota = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'POTA_' . $callsign . '@' . $potaLocId . '_' . $lastDatePota . '.adi';
             if (file_exists($filenamePota)) {
                 $adif =     new adif($filenamePota);
                 $complete = array_merge($adif->parser(), $exportPota);
@@ -914,7 +918,8 @@ class PS {
             file_put_contents($filenamePota, $adif);
         }
         if (!empty($exportWwff)) {
-            $filenameWwff = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'WWFF' . "_" . $wwffLocId . ".adi";
+            // Named according to https://www.veff.ca/rules - 6.6 - "callsign@reference YYYYMMDD"
+            $filenameWwff = $this->sessionAdifDirectory . DIRECTORY_SEPARATOR . 'WWFF_' . $callsign . '@' . $potaLocId . '_' . $lastDateWwff . '.adi';
             if (file_exists($filenameWwff)) {
                 $adif =     new adif($filenameWwff);
                 $complete = array_merge($adif->parser(), $exportWwff);
