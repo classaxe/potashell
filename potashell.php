@@ -1151,7 +1151,7 @@ class PS {
             $DX =       number_format(static::dataGetBestDx($data));
 
             print PS::BLUE_BD . str_pad($qthId, 9, ' ') . PS::GREEN_BD . " | "
-                . PS::YELLOW_BD . str_pad($data[0]['ALT_LOC_ID'], 9, ' ') . PS::GREEN_BD . " | "
+                . PS::YELLOW_BD . str_pad((isset($data[0]['ALT_LOC_ID']) ? $data[0]['ALT_LOC_ID'] : ""), 9, ' ') . PS::GREEN_BD . " | "
                 . (count($MY_GRID) === 1 ?
                     PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
                     PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
