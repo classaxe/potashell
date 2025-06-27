@@ -960,15 +960,15 @@ class PS {
 
     private function potaPublishSpot() {
         $url = 'https://api.pota.app/spot/';
-        // $url = 'https://logs.classaxe.com/test.php';
+        // $url = 'https://logs.classaxe.com/custom/endpoint.php';
         $activator = ($this->inputQthId === 'K-TEST' ? 'ABC123' : $this->qrzApiCallsign);
         $data = json_encode([
             'activator' =>  $activator,
             'spotter' =>    $this->qrzApiCallsign,
             'frequency' =>  $this->spotKhz,
-            'reference' =>  $this->inputQthId,
-            'source' =>     'Potashell ' . $this->version . ' - https://github.com/classaxe/potashell',
-            'comments' =>   $this->spotComment
+            'reference' =>  $this->lookupLocId,
+            'source' =>     'Potashell ' . $this->version,
+            'comments' =>   $this->spotComment . ($this->lookupAltLocId ? ' | ' . $this->lookupLocId . ' / ' . $this->lookupAltLocId : '')
         ]);
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For HTTPS
@@ -1459,7 +1459,8 @@ class PS {
 
     private function processParkSpot() {
         $activator = ($this->inputQthId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
-        $linelen = 44 + strlen($this->spotComment);
+        $comment = $this->spotComment . ($this->lookupAltLocId ? ' | ' .$this->lookupLocId . ' / ' . $this->lookupAltLocId : '');
+        $linelen = 44 + strlen($comment);
         print PS::YELLOW_BD . "\nPENDING OPERATION:\n"
             . PS::GREEN_BD . "    The following spot will be published at pota.app:\n\n"
             . PS::WHITE_BD . "     Activator  Spotter    KHz      Park Ref   Comments\n"
@@ -1469,7 +1470,7 @@ class PS {
             . str_pad($this->qrzLogin, 10, ' ') . ' '
             . str_pad($this->spotKhz, 8, ' ') . ' '
             . str_pad($this->inputQthId, 10, ' ') . ' '
-            . $this->spotComment . "\n"
+            . $comment . "\n"
             . "    " . str_repeat('-', $linelen) . "\n\n"
             . PS::YELLOW_BD . "CONFIRMATION REQUIRED:\n"
             . PS::GREEN_BD . "    Please confirm that you want to publish the spot: (Y/N) " . PS::BLUE_BD;
@@ -1483,7 +1484,7 @@ class PS {
         if ($result === true) {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
                 . "  - Your spot at " . PS::BLUE_BD . $this->inputQthId . PS::GREEN_BD . " on " . PS::MAGENTA_BD . $this->spotKhz . " KHz" . PS::GREEN_BD
-                . " has been published on " . PS::YELLOW_BD . "pota.app" . PS::GREEN_BD . " as " . PS::RED_BD . "\"" . $this->spotComment . "\"" . PS::GREEN_BD . "\n"
+                . " has been published on " . PS::YELLOW_BD . "pota.app" . PS::GREEN_BD . " as " . PS::RED_BD . "\"" . $comment . "\"" . PS::GREEN_BD . "\n"
                 . PS::RESET;
             return true;
         }
