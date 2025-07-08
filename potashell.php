@@ -1082,7 +1082,7 @@ class PS {
             . PS::GREEN_BD . "Performing Audit on all location Log files in "
             . PS::BLUE_BD . $this->pathAdifLocal . "\n";
 
-        $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
+        $files = glob($this->pathAdifLocal . "wsjtx_log_*-*.adi");
         if (!$files) {
             print PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD . "No log files found." .  PS::RESET . "\n";
             return;
@@ -1095,14 +1095,14 @@ class PS {
         );
 
         print PS::YELLOW_BD . "\nKEY:\n" . PS::GREEN_BD
-            . "  " . PS::CYAN_BD . "#LT" . PS::GREEN_BD . " =    Logs in total - excluding duplicates\n"
+            . "  " . PS::CYAN_BD . "#LT" . PS::GREEN_BD . " =    Total Unique Logs - "
+            . PS::YELLOW_BD . PS::ACTIVATION_LOGS_WWFF . PS::GREEN_BD . " required for WWFF activation\n"
             . "  " . PS::CYAN_BD . "#ST" . PS::GREEN_BD . " =    Sessions in Total\n"
             . "  " . PS::CYAN_BD . "#SA" . PS::GREEN_BD . " =    Successful Activations\n"
             . "  " . PS::CYAN_BD . "#FA" . PS::GREEN_BD . " =    Failed Activations\n"
             . "  " . PS::CYAN_BD . "#MG" . PS::GREEN_BD . " =    Missing Grid Squares\n"
             . "  " . PS::CYAN_BD . "#LS" . PS::GREEN_BD . " =    Unique logs for latest session - "
-            . PS::RED_BD . PS::ACTIVATION_LOGS_POTA . PS::GREEN_BD . " required for POTA activation, "
-            . PS::RED_BD . PS::ACTIVATION_LOGS_WWFF . PS::GREEN_BD . " required for WWFF activation\n"
+            . PS::YELLOW_BD . PS::ACTIVATION_LOGS_POTA . PS::GREEN_BD . " required for POTA activation\n"
             . "  " . PS::CYAN_BD . "#B" . PS::GREEN_BD . "  =    Number of bands\n"
             . "  " . PS::CYAN_BD . "UPLOAD" . PS::GREEN_BD . " = Uploaded logs to "
             . PS::YELLOW . "C" . PS::GREEN_BD . "-Clublog, "
@@ -1113,6 +1113,7 @@ class PS {
             . str_repeat('-', PS::MAXLEN) . "\n"
             .  PS::CYAN_BD . $columns . PS::GREEN_BD . "\n"
             . str_repeat('-', PS::MAXLEN) . "\n";
+        $count = [];
         foreach ($files as $i => $file) {
             if (!is_file($file)) {
                 continue;
@@ -1150,23 +1151,37 @@ class PS {
             $B =        static::dataCountBands($data);
             $DX =       number_format(static::dataGetBestDx($data));
 
+            if ($data[0]['PROGRAM'] === 'POTA' && empty($data[0]['ALT_PROGRAM'])) {
+                if (!isset($count['POTA'])) {
+                    $count['POTA'] = 0;
+                }
+                $count['POTA']++;
+            }
+            if ($data[0]['PROGRAM'] === 'WWFF' && empty($data[0]['ALT_PROGRAM'])) {
+                if (!isset($count['WWFF'])) {
+                    $count['WWFF'] = 0;
+                }
+                $count['WWFF']++;
+            }
+            if (!empty($data[0]['PROGRAM']) && !empty($data[0]['ALT_PROGRAM'])) {
+                if (!isset($count['DUAL'])) {
+                    $count['DUAL'] = 0;
+                }
+                $count['DUAL']++;
+            }
             print PS::BLUE_BD . str_pad($qthId, 9, ' ') . PS::GREEN_BD . " | "
                 . PS::YELLOW_BD . str_pad((isset($data[0]['ALT_LOC_ID']) ? $data[0]['ALT_LOC_ID'] : ""), 9, ' ') . PS::GREEN_BD . " | "
                 . (count($MY_GRID) === 1 ?
                     PS::CYAN_BD . str_pad($MY_GRID[0], 10, ' ') :
                     PS::RED_BD . str_pad('ERR ' . count($MY_GRID) . ' GSQs', 10, ' ')
                   ) . PS::GREEN_BD . " | "
-
-                . str_pad($LT, 3, ' ', STR_PAD_LEFT) . ' | '
+                . (($data[0]['PROGRAM'] === 'WWFF' || $data[0]['ALT_PROGRAM'] === 'WWFF') && $LT < PS::ACTIVATION_LOGS_WWFF ? PS::RED_BD : '')
+                . str_pad($LT, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                 . str_pad($ST, 3, ' ', STR_PAD_LEFT) . ' | '
                 . str_pad($AT, 3, ' ', STR_PAD_LEFT) . ' | '
                 . PS::RED_BD . str_pad(($FT ? $FT : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                 . PS::RED_BD . str_pad(($MG ? $MG : ''), 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
-
-                . (
-                    ($data[0]['PROGRAM'] === 'POTA' && $LS < PS::ACTIVATION_LOGS_POTA) ||
-                    ($data[0]['PROGRAM'] === 'WWFF' && $LS < PS::ACTIVATION_LOGS_WWFF)
-                  ? PS::RED_BD : '')
+                . (($data[0]['PROGRAM'] === 'POTA' || $data[0]['ALT_PROGRAM'] === 'POTA') && $LS < PS::ACTIVATION_LOGS_POTA ? PS::RED_BD : '')
                 . str_pad($LS, 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
                 . str_pad($B, 2, ' ', STR_PAD_LEFT) . ' | '
                 . str_pad($DX, 6, ' ', STR_PAD_LEFT) . ' | ' . PS::YELLOW
@@ -1178,7 +1193,19 @@ class PS {
                 . PS::BLUE_BD . $data[0]['MY_CITY'] . PS::GREEN_BD
                 . "\n";
         }
-        print str_repeat('-', PS::MAXLEN) . PS::RESET . "\n";
+        $stats = [];
+        if (!empty($count['POTA'])) {
+            $stats[] = PS::CYAN_BD . "POTA: " . PS::YELLOW_BD . $count['POTA'];
+        }
+        if (!empty($count['WWFF'])) {
+            $stats[] = PS::CYAN_BD . "WWFF: " . PS::YELLOW_BD . $count['WWFF'];
+        }
+        if (!empty($count['DUAL'])) {
+            $stats[] = PS::CYAN_BD . "DUAL: " . PS::YELLOW_BD . $count['DUAL'];
+        }
+        print str_repeat('-', PS::MAXLEN) ."\n"
+            . ($stats ? "Park Stats: " . implode(PS::GREEN_BD . ' | ', $stats) . "\n" : '')
+            . PS::RESET . "\n";
     }
 
     private function processExport()
