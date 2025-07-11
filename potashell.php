@@ -839,10 +839,32 @@ class PS {
 
     private function parkGetInfo($qthId) {
         if (!$this->hasInternet) {
-            if (substr($qthId, 0, 2) === 'XX') {
-                $program = "CUSTOM";
-            } else {
-                $program = substr($qthId, 0, 4);
+            $prefix = explode('-', $qthId)[0];
+            switch($prefix) {
+                case 'CA':
+                case 'GB':
+                case 'GD':
+                case 'IE':
+                case 'IM':
+                case 'MX':
+                case 'PM':
+                case 'US':
+                    $program = 'POTA';
+                    break;
+
+                case 'XX':
+                    $program = "CUSTOM";
+                    break;
+
+                case 'GFF':
+                case 'GDFF':
+                case 'GIFF':
+                case 'VEFF':
+                    $program = "WWFF";
+                    break;
+
+                default:
+                    $program = $prefix;
             }
             return [
                 'name' =>           $qthId,
@@ -861,7 +883,10 @@ class PS {
         }
         $data = json_decode($data);
         $parkName = trim($data->name);
-        $parkNameAbbr = strtr($data->program . ": " . $qthId . " " . $parkName, PS::NAME_SUBS);
+        $parkNameAbbr = strtr(
+            $data->program . ': ' . $qthId . ($data->alt_program ? ' / ' . $data->alt_program . ': ' . $data->alt_ref : '') . ' | ' . $parkName,
+            PS::NAME_SUBS
+        );
         return [
             'abbr' =>           $parkNameAbbr,
             'name' =>           $parkName,
