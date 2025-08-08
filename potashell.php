@@ -1048,7 +1048,6 @@ class PS {
             'DUAL' => 0,
             'CUSTOM' => 0,
         ];
-
         $logbooks = [];
 
         $files = glob($this->pathAdifLocal . "wsjtx_log_*-*.adi");
@@ -1063,7 +1062,6 @@ class PS {
             if ($i > 4) {
 //                continue;   // For development testing
             }
-            $fn =       basename($file);
             $adif =     new adif($file);
             $data =     $adif->parser();
             $logbook =  new Logbook($data);
@@ -1077,12 +1075,34 @@ class PS {
             $logbooks[] = $logbook;
             $count[$logbook->program]++;
         }
-
-        $columns = str_replace(
-            "|",
-            PS::GREEN_BD . "|" . PS::CYAN_BD,
-            "QTH ID    | ALT ID    | MY_GRID    | MY_CALL    | LATEST LOG | #LT | #ST | #SA | #FA | #MG | #LS | #B |  DX KM | UPLOAD  | Park Name in Log File"
-        );
+        $columns = [
+            'QTH ID' =>     ['color' => PS::BLUE_BD,    'len' => 9,    'pad' => 'r',    'source' => 'qthId'],
+            'ALT ID' =>     ['color' => PS::YELLOW_BD,  'len' => 9,    'pad' => 'r',    'source' => 'qthIdAlt'],
+            'MY_GRID' =>    ['color' => PS::CYAN_BD,    'len' => 10,   'pad' => 'r',    'source' => 'myGsqFmt'],
+            'MY_CALL' =>    ['color' => PS::MAGENTA_BD, 'len' => 10,   'pad' => 'r',    'source' => 'myCallsign'],
+            'LATEST LOG' => ['color' => PS::WHITE_BD,   'len' => 10,   'pad' => 'r',    'source' => 'dateFmt'],
+            '#LT' =>        ['color' => PS::YELLOW_BD,  'len' => 3,    'pad' => 'r',    'source' => 'count_LT'],
+            '#ST' =>        ['color' => '',             'len' => 3,    'pad' => 'r',    'source' => 'count_ST'],
+            '#SA' =>        ['color' => '',             'len' => 3,    'pad' => 'r',    'source' => 'count_AT'],
+            '#FA' =>        ['color' => '',             'len' => 3,    'pad' => 'r',    'source' => 'count_FA'],
+            '#MG' =>        ['color' => '',             'len' => 3,    'pad' => 'r',    'source' => 'count_MG'],
+            '#LS' =>        ['color' => PS::YELLOW_BD,  'len' => 3,    'pad' => 'r',    'source' => 'count_LS'],
+            '#B' =>         ['color' => '',             'len' => 2,    'pad' => 'r',    'source' => 'count_BT'],
+            'DX KM' =>      ['color' => PS::CYAN,       'len' => 6,    'pad' => 'l',    'source' => 'bestDx'],
+            'UPLOAD' =>     ['color' => PS::YELLOW,     'len' => 7,    'pad' => 'r',    'source' => 'uploadStatus'],
+            'Park Name' =>  ['color' => PS::BLUE_BD,    'len' => 10,   'pad' => 'r',    'source' => 'myCity'],
+        ];
+        $cols = [];
+        foreach ($columns as $k => $v) {
+            $cols[] = str_pad($k, $v['len'], ' ', $v['pad'] === 'l' ? STR_PAD_LEFT : STR_PAD_RIGHT);
+        }
+        $cols = implode(' ' . PS::GREEN_BD . '|' . PS::CYAN_BD . ' ', $cols);
+        $stats = [];
+        foreach($count as $key => $value) {
+            if ($value) {
+                $stats[] = PS::CYAN_BD . $key . ": " . PS::YELLOW_BD . $value;
+            }
+        }
 
         $out = PS::YELLOW_BD . "STATUS:\n"
             . PS::GREEN_BD . "Performing Audit on all location Log files in "
@@ -1104,43 +1124,39 @@ class PS {
             . PS::YELLOW . "W" . PS::GREEN_BD . "-WWFF session export file\n"
             . PS::YELLOW_BD . "\nRESULT:\n" . PS::GREEN_BD
             . str_repeat('-', PS::MAXLEN) . "\n"
-            .  PS::CYAN_BD . $columns . PS::GREEN_BD . "\n"
+            .  PS::CYAN_BD . $cols . PS::GREEN_BD . "\n"
             . str_repeat('-', PS::MAXLEN) . "\n";
 
         foreach ($logbooks as $l) {
-            $out .= PS::BLUE_BD . str_pad($l->qthId, 9, ' ') . PS::GREEN_BD . " | "
-                . PS::YELLOW_BD . str_pad($l->qthIdAlt, 9, ' ') . PS::GREEN_BD . " | "
-                . (count($l->myGsqs) === 0 ?
-                    PS::RED_BD . '[MISSING] ' :
-                    (count($l->myGsqs) === 1 ?
-                        PS::CYAN_BD . str_pad($l->myGsqs[0], 10, ' ') :
-                        PS::RED_BD . str_pad('ERR ' . count($l->myGsqs) . ' GSQs', 10, ' ')
-                    )
-                ) . PS::GREEN_BD . " | "
-                . PS::MAGENTA_BD . str_pad($l->myCallsign, 10, ' ') . PS::GREEN_BD . " | "
-                . PS::WHITE_BD . $l->dateFmt . PS::GREEN_BD . ' | '
-                . (in_array($l->program,['WWFF', 'DUAL']) && $l->count['LT'] < PS::ACTIVATION_LOGS_WWFF ? PS::RED_BD : '')
-                . str_pad($l->count['LT'], 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
-                . str_pad($l->count['ST'], 3, ' ', STR_PAD_LEFT) . ' | '
-                . str_pad($l->count['AT'], 3, ' ', STR_PAD_LEFT) . ' | '
-                . ($l->count['FT'] ? PS::RED_BD . str_pad($l->count['FT'], 3, ' ', STR_PAD_LEFT)  . PS::GREEN_BD : '   ') . ' | '
-                . ($l->count['MG'] ? PS::RED_BD . str_pad($l->count['MG'], 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD : '   ')  . ' | '
-                . (in_array($l->program, ['POTA', 'DUAL']) && $l->count['LS'] < PS::ACTIVATION_LOGS_POTA ? PS::RED_BD : '')
-                . str_pad($l->count['LS'], 3, ' ', STR_PAD_LEFT) . PS::GREEN_BD . ' | '
-                . str_pad($l->count['bands'], 2, ' ', STR_PAD_LEFT) . ' | '
-                . str_pad(number_format($l->bestDx), 6, ' ', STR_PAD_LEFT) . ' | ' . PS::YELLOW
-                . $l->uploadStatus . PS::GREEN_BD . ' | '
-                . PS::BLUE_BD . $l->myCity . PS::GREEN_BD
-                . "\n";
-
-        }
-        $stats = [];
-        foreach($count as $key => $value) {
-            if ($value) {
-                $stats[] = PS::CYAN_BD . $key . ": " . PS::YELLOW_BD . $value;
+            $line = [];
+            foreach ($columns as $k => $v) {
+                $color = $v['color'];
+                $value = $l->{$v['source']};
+                switch ($k) {
+                    case 'MY_GRID':
+                        if (count($l->myGsqs)!==1) {
+                            $color = PS::RED_BD;
+                        }
+                        break;
+                    case '#LT':
+                        if (in_array($l->program,['WWFF', 'DUAL']) && $l->count_LT < PS::ACTIVATION_LOGS_WWFF){
+                            $color = PS::RED_BD;
+                        }
+                        break;
+                    case '#LS':
+                        if (in_array($l->program, ['POTA', 'DUAL']) && $l->count_LS < PS::ACTIVATION_LOGS_POTA) {
+                            $color = PS::RED_BD;
+                        }
+                        break;
+                    case 'DX KM':
+                        $value = number_format($value);
+                        break;
+                }
+                $line[] = $color . str_pad($value, $v['len'], ' ', $v['pad'] === 'l' ? STR_PAD_LEFT : STR_PAD_RIGHT);
             }
+            $out .= implode(PS::GREEN_BD . " | ", $line) . "\n";
         }
-        $out .= str_repeat('-', PS::MAXLEN) ."\n"
+        $out .= PS::GREEN_BD . str_repeat('-', PS::MAXLEN) ."\n"
             . ($stats ? "Park Stats: " . implode(PS::GREEN_BD . ', ', $stats) . "\n" : '')
             . PS::RESET . "\n";
         return $out;
@@ -1840,6 +1856,7 @@ class PS {
             . "\n" . PS::YELLOW_BD
             . $this->showSyntax(2)
             . "       - The system reviews ALL archived Park Log files, and produces a report on their contents.\n"
+            . "       - If an optional valid column header is given, results are sorted by that column.\n"
             . "\n" . PS::YELLOW_BD
             . $this->showSyntax(3)
             . "       - Detailed help is provided.\n"
@@ -2001,7 +2018,8 @@ class PS {
                     . "     " . PS::WHITE_BD . "potashell " . PS::BLUE_BD . "CA-1368 " . PS::CYAN_BD ."FN03FV82 " . PS::GREEN_BD . "SPOT " . PS::YELLOW_BD . "14074 " . PS::RED_BD . "\"FT8 - QRP 4w\"\n"
                     ;
             case 2:
-                return PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n";
+                return PS::YELLOW_BD . "  2. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::YELLOW . "\n"
+                    . "     " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "AUDIT " . PS::RED_BD . "\"LATEST LOG\"" . PS::YELLOW . "\n";
             case 3:
                 return PS::YELLOW_BD . "  3. " . PS::WHITE_BD . "potashell " . PS::GREEN_BD . "HELP " . PS::YELLOW . "\n";
             case 4:
@@ -2273,15 +2291,13 @@ class adif {
 }
 
 class Logbook {
-    public $count = [
-        'AT' => 0,      // Activations Total
-        'bands' => 0,   // Bands
-        'FT' => 0,      // Failed Activations
-        'LS' => 0,      // Unique Logs Last Session
-        'LT' => 0,      // Unique Logs Total
-        'MG' => 0,      // Missing Gridsquares
-        'ST' => 0       // Sessions Total
-    ];
+    public $count_AT = 0;       // Activations Total
+    public $count_BT = 0;       // Bands Total
+    public $count_FA = 0;       // Failed Activations
+    public $count_LS = 0;       // Unique Logs Last Session
+    public $count_LT = 0;       // Unique Logs Total
+    public $count_MG = 0;       // Missing Gridsquares
+    public $count_ST = 0;       // Sessions Total
     public $bestDx = 0;
     public $date;
     public $dateFmt;
@@ -2292,27 +2308,33 @@ class Logbook {
     public $myCallsign;
     public $myCity;
     public $myGsqs = [];
+    public $myGsqFmt;
     public $uploadStatus;
 
     public function __construct($logs) {
         $this->logs =       $logs;
         $this->myGsqs =     static::dataGetMyGrid($logs);
+        $this->myGsqFmt = (count($this->myGsqs) === 1 ?
+            $this->myGsqs[0] :
+            (count($this->myGsqs) === 0 ? 'MISSING' : 'ERR ' . count($this->myGsqs) . ' GSQS')
+        );
+
         $this->myCity =     $logs[0]['MY_CITY'];
         $this->qthId =      isset($logs[0]['LOC_ID']) ? $logs[0]['LOC_ID'] : "";
         $this->qthIdAlt =   isset($logs[0]['ALT_LOC_ID']) ? $logs[0]['ALT_LOC_ID'] : "";
         $this->myCallsign = $logs[0]['STATION_CALLSIGN'];
 
-        $dates =                static::dataGetDates($this->logs);
-        $this->bestDx =         static::dataGetBestDx($this->logs);
-        $this->date =           end($dates);
-        $this->dateFmt =        substr($this->date, 0, 4) . '-' . substr($this->date, 4, 2) . '-' . substr($this->date,6);
-        $this->count['LS'] =    static::dataCountLogs($this->logs, $this->date);
-        $this->count['LT'] =    static::dataCountLogs($this->logs);
-        $this->count['MG'] =    static::dataCountMissingGsq($this->logs);
-        $this->count['ST'] =    count($dates);
-        $this->count['AT'] =    static::dataCountActivations($this->logs);
-        $this->count['FT'] =    $this->count['ST'] - $this->count['AT'];
-        $this->count['bands'] = static::dataCountBands($this->logs);
+        $dates =            static::dataGetDates($this->logs);
+        $this->bestDx =     static::dataGetBestDx($this->logs);
+        $this->date =       end($dates);
+        $this->dateFmt =    substr($this->date, 0, 4) . '-' . substr($this->date, 4, 2) . '-' . substr($this->date,6);
+        $this->count_LS =   static::dataCountLogs($this->logs, $this->date);
+        $this->count_LT =   static::dataCountLogs($this->logs);
+        $this->count_MG =   static::dataCountMissingGsq($this->logs);
+        $this->count_ST =   count($dates);
+        $this->count_AT =   static::dataCountActivations($this->logs);
+        $this->count_FA =   $this->count_ST - $this->count_AT;
+        $this->count_BT =   static::dataCountBands($this->logs);
         $this->uploadStatus =
             (static::dataCountUploadType($this->logs, 'TO_CLUBLOG') === count($this->logs) ? 'C' : ' ') . ' '
             . (static::dataCountUploadType($this->logs, 'TO_QRZ') === count($this->logs) ? 'Q' : ' ') . ' '
