@@ -168,11 +168,11 @@ class PS {
         $this->qrzCheck();
         $this->clublogCheck();
         if ($this->modeAudit) {
-            PS::_print($this->processAudit());
+            prt($this->processAudit());
             return;
         }
         if ($this->modeHelp) {
-            PS::_print($this->showHelp());
+            prt($this->showHelp());
             return;
         }
         if ($this->modeExport) {
@@ -184,21 +184,15 @@ class PS {
             return;
         }
         if ($this->modeSyntax) {
-            PS::_print($this->showSyntax());
+            prt($this->showSyntax());
             return;
         }
         if ($this->inputGSQ === null) {
-            PS::_print($this->showSyntax());
+            prt($this->showSyntax());
             $this->argsGetInput();
         }
         // submodes check, review, spot, summary and push are all supported
         $this->process();
-    }
-
-    private static function _print($text) {
-        $subs = PS::TEXTSUBS;
-        $subs['<--->'] = str_repeat('-', PS::MAXLEN);
-        print strtr($text, $subs);
     }
 
     private function argsGetCli() {
@@ -280,23 +274,23 @@ class PS {
     }
 
     private function argsGetInput() {
-        PS::_print("\n<Y>ARGUMENTS:\n");
+        prt("\n<Y>ARGUMENTS:\n");
         if ($this->inputQthId === null) {
-            PS::_print("<G>  - Please provide Location ID:  <B>");
+            prt("<G>  - Please provide Location ID:  <B>");
             $fin = fopen("php://stdin","r");
             $this->inputQthId = trim(fgets($fin));
         } else {
-            PS::_print("<G>  - Supplied Location ID:        <B>{$this->inputQthId}\n");
+            prt("<G>  - Supplied Location ID:        <B>{$this->inputQthId}\n");
         }
         if ($this->inputGSQ === null) {
-            PS::_print("<G>  - Please provide 8/10-char GSQ: <C>");
+            prt("<G>  - Please provide 8/10-char GSQ: <C>");
             $fin = fopen("php://stdin","r");
             $this->inputGSQ = trim(fgets($fin));
         } else {
-            PS::_print("<G>  - Supplied Gridsquare:          <C>{$this->inputGSQ}\n");
+            prt("<G>  - Supplied Gridsquare:          <C>{$this->inputGSQ}\n");
         }
         $this->locationName = "POTA: " . $this->inputQthId;
-        PS::_print("\n");
+        prt("\n");
     }
 
     private function argsLoadIni() {
@@ -307,22 +301,22 @@ class PS {
             $contents = file_get_contents(__DIR__ . DIRECTORY_SEPARATOR . $example);
             $contents = str_replace("; This is a sample configuration file for potashell\r\n", '', $contents);
             $contents = str_replace("; Copy this file to potashell.ini, and modify it to suit your own needs\r\n", '', $contents);
-            PS::_print("<R>ERROR:\n  The <B>{$filename} <R>Configuration file was missing.\n");
+            prt("<R>ERROR:\n  The <B>{$filename} <R>Configuration file was missing.\n");
             if (file_put_contents(__DIR__ . DIRECTORY_SEPARATOR . $filename, $contents)) {
-                PS::_print("  <R>It has now been created.\n  Please edit the new <B>{$filename} <R>file, and supply your own values.\n");
+                prt("  <R>It has now been created.\n  Please edit the new <B>{$filename} <R>file, and supply your own values.\n");
             }
-            PS::_print("<RESET>\n");
+            prt("<RESET>\n");
             die(0);
         };
         if (!$this->config = @parse_ini_file($filename, true)) {
             $this->showHeader();
-            PS::_print("<R>ERROR:\n  Unable to parse <B>{$filename} <R>file.<RESET>\n\n");
+            prt("<R>ERROR:\n  Unable to parse <B>{$filename} <R>file.<RESET>\n\n");
             die(0);
         };
         $this->pathAdifLocal = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR;
         if (!file_exists($this->pathAdifLocal)) {
             $this->showHeader();
-            PS::_print(
+            prt(
                 "<R>ERROR:\n"
                 . "  The specified <Y>[WSJTX] <C>log_directory <R>specified in <B>{$filename} <R>doesn't exist.\n"
                 . "  Please edit <B>{$filename} <R>and set the correct path to your WSJT-X log files.<RESET>\n\n"
@@ -485,7 +479,7 @@ class PS {
                 $httpstatus = curl_getinfo($curl, CURLINFO_HTTP_CODE);
                 curl_close($curl);
             } catch (\Exception $e) {
-                PS::_print("<R>ERROR:\n  Unable to connect to Clublog.com for log uploads:<B>" . $e->getMessage() . "<RESET>\n\n");
+                prt("<R>ERROR:\n  Unable to connect to Clublog.com for log uploads:<B>" . $e->getMessage() . "<RESET>\n\n");
                 die(0);
             }
             switch ($result) {
@@ -754,20 +748,14 @@ class PS {
             $qty = ($qtyAlways || ($count > 1) ? ' (' . $count . ')' : '');
             $lineLen += strlen($item . $qty . ',');
             if ($lineLen > $maxLen) {
-                $item = "\n" . str_repeat(' ', $indent) . $item . PS::CYAN_BD . $qty;
+                $item = "\n" . str_repeat(' ', $indent) . "$item<C>$qty";
                 $lineLen = $indent;
             } else {
-                $item .= PS::CYAN_BD . $qty;
+                $item .= "<C>$qty";
             }
             $tmp[] = $item;
         }
         return $tmp;
-    }
-
-    private static function formatText($text) {
-        $subs = PS::TEXTSUBS;
-        $subs['<--->'] = str_repeat('-', PS::MAXLEN);
-        return strtr($text, $subs);
     }
 
     private function getHTTPContext() {
@@ -801,13 +789,11 @@ class PS {
 
     private function internetCheck() {
         if (!@fsockopen('www.example.com', 80)) {
-            print
-                PS::RED_BD . "WARNING:\n"
+            prt("<R>WARNING:\n"
                 . "  - You have no internet connection.\n"
                 . "  - Automatic gridquare and park name lookups will not work.\n"
-                . "  - QRZ uploads are not possible at this time.\n"
-                . PS::RESET
-                . "\n";
+                . "  - QRZ uploads are not possible at this time.\n\n<RESET>"
+            );
             return;
         }
         $this->hasInternet = true;
@@ -887,7 +873,7 @@ class PS {
         $exportWwff =   [];
         foreach ($data as &$record) {
             if (!isset($record['TO_WWFF'])) {
-                PS::_print(PS::RED_BD . "No TO_WWFF column in " . $data[0]['LOC_ID'] . "\n");
+                prt("<R>No TO_WWFF column in {$data[0]['LOC_ID']}\n");
                 break;
             }
             if ($record['PROGRAM'] === 'POTA' || $record['ALT_PROGRAM'] === 'POTA') {
@@ -957,7 +943,7 @@ class PS {
             . "  <G>PHP version <Y>%s<G>, php.ini file: <Y>%s<RESET>\n\n";
         foreach ($libs as $lib) {
             if (!extension_loaded($lib)) {
-                PS::_print(sprintf($msg, $lib, phpversion(),(php_ini_loaded_file() ? php_ini_loaded_file() : "None")));
+                prt(sprintf($msg, $lib, phpversion(),(php_ini_loaded_file() ? php_ini_loaded_file() : "None")));
                 die(0);
             }
         }
@@ -988,16 +974,16 @@ class PS {
     }
 
     private function process() {
-        PS::_print("<Y>STATUS:\n");
+        prt("<Y>STATUS:\n");
         if (!$this->inputQthId || !$this->inputGSQ) {
-            PS::_print(
+            prt(
                 "<R>  - One or more required parameters are missing.\n"
                 . "    Unable to continue.\n<RESET>"
             );
             die(0);
         }
         if (!$lookup = $this->getLocationDetails($this->inputQthId)) {
-            PS::_print(
+            prt(
                 "<R>  - Unable to get name for park <B>{$this->inputQthId}<R>\n"
                 . "    Unable to continue.\n<RESET>"
             );
@@ -1009,9 +995,9 @@ class PS {
         $this->lookupLocId =        $lookup['loc_id'];
         $this->lookupAltProgram =   $lookup['alt_program'];
         $this->lookupAltLocId =     $lookup['alt_loc_id'];
-        PS::_print(
-                "<G>  - Command:          <W>potashell <C>{$this->inputQthId} <B>{$this->inputGSQ} <G>{$this->mode} {$this->modePushQty} <M>{$this->argCheckBand}\n"
-            . "<G>  - Location Id:      " . PS::YELLOW_BD . $this->lookupProgram . ": " . $this->lookupLocId
+        prt("<G>  - Command:          <W>potashell <C>{$this->inputQthId} <B>{$this->inputGSQ} "
+            . "<G>{$this->mode} {$this->modePushQty} <M>{$this->argCheckBand}\n"
+            . "<G>  - Location Id:      <Y>{$this->lookupProgram }: {$this->lookupLocId}"
             . ($this->lookupAltProgram ?
                 " <G>/<Y> {$this->lookupAltProgram}: {$this->lookupAltLocId}"
                 : ""
@@ -1027,7 +1013,7 @@ class PS {
         $fileAdifWsjtxExists =  file_exists($this->pathAdifLocal . $this->fileAdifWsjtx);
 
         if (($fileAdifParkExists || $fileAdifWsjtxExists) && $this->modeInvalid) {
-            PS::_print("<R>ERROR:\n  Unknown mode <G>{$this->mode}<RESET>\n");
+            prt("<R>ERROR:\n  Unknown mode <G>{$this->mode}<RESET>\n");
             return;
         }
 
@@ -1061,13 +1047,12 @@ class PS {
             $data1 = $adif1->parser();
             $adif2 = new adif($this->pathAdifLocal . $this->fileAdifWsjtx);
             $data2 = $adif2->parser();
-            print
-                PS::RED_BD . "  - Both " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::RED_BD
-                . " and " . PS::BLUE_BD ."{$this->fileAdifWsjtx}" . PS::RED_BD . " exist.\n"
-                . "    File " . PS::BLUE_BD . "{$this->fileAdifPark}" . PS::RED_BD . " contains " . PS::MAGENTA_BD . count($data1) . PS::RED_BD . " entries\n"
-                . "    File " . PS::BLUE_BD . "{$this->fileAdifWsjtx}" . PS::RED_BD . " contains " . PS::MAGENTA_BD . count($data2) . PS::RED_BD . " entries\n"
+            prt("<R>  - Both <B>{$this->fileAdifPark} <R>and <B>{$this->fileAdifWsjtx} <R>exist.\n"
+                . "    File <B>{$this->fileAdifPark} <R>contains <M>" . count($data1) . " <R>entries\n"
+                . "    File <B>{$this->fileAdifWsjtx} <R>contains <M>" . count($data2) . " <R>entries\n"
                 . "\n"
-                . "    Manual user intervention is required to prevent data loss." . PS::RESET . "\n";
+                . "    Manual user intervention is required to prevent data loss.\n<RESET>"
+            );
             die(0);
         }
         if (!$fileAdifParkExists && !$fileAdifWsjtxExists) {
@@ -1201,12 +1186,12 @@ class PS {
     private function processExport() {
         $force = false;  // Set to true to export everything, regardless of previous export status
 
-        PS::_print(
+        prt(
             "<Y>STATUS:\n  <G>Performing Export to POTA and WWFF files for all location Log files in <B>{$this->pathAdifLocal}\n"
         );
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
         if (!$files) {
-            PS::_print("\n<Y>RESULT:\n<G>No log files found.<RESET>\n");
+            prt("\n<Y>RESULT:\n<G>No log files found.<RESET>\n");
             return;
         }
 
@@ -1220,23 +1205,23 @@ class PS {
             }
             $adif = new adif($file);
             $data = $adif->parser();
-            PS::_print($this->parkSaveLogs($data, $force));
+            prt($this->parkSaveLogs($data, $force));
             $adif = $adif->toAdif($data, $this->version, false, true);
             file_put_contents($file, $adif);
         }
-        PS::_print("\n<Y>DONE\n<RESET>");
+        prt("\n<Y>DONE\n<RESET>");
     }
 
     private function processMigrate()
     {
-        PS::_print("<Y>STATUS:\n<G>Performing Migration on all WWJT-X Log files requiring upgrade in <B>{$this->pathAdifLocal}\n");
+        prt("<Y>STATUS:\n<G>Performing Migration on all WWJT-X Log files requiring upgrade in <B>{$this->pathAdifLocal}\n");
 
         $files = glob($this->pathAdifLocal . "wsjtx_log_??-*.adi");
         if (!$files) {
-            PS::_print("\n<Y>RESULT:\n<G>No log files found.<RESET>\n");
+            prt("\n<Y>RESULT:\n<G>No log files found.<RESET>\n");
             return;
         }
-        PS::_print("\n");
+        prt("\n");
         $count = 0;
         foreach ($files as $i => $file) {
             if (!is_file($file)) {
@@ -1250,7 +1235,7 @@ class PS {
             $qthId = explode('.', explode('_', $fn)[2])[0];
             $lookup = $this->getLocationDetails($qthId);
             if (!$lookup) {
-                PS::_print("  <B>" . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". "
+                prt("  <B>" . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". "
                     . "<Y>{$fn} <R>NOT migrated - park data not found\n");
                 continue;
             }
@@ -1258,7 +1243,7 @@ class PS {
             $adif = new adif($file);
             $data = $adif->parser();
             if (isset($data[0]['PROGRAM'])) {
-                PS::_print("  <B>" . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". "
+                prt("  <B>" . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". "
                     ."<Y>{$fn} <G>already migrated\n"
                 );
                 continue;
@@ -1272,9 +1257,9 @@ class PS {
             $data = $this->dataSetColumnOrder($data);
             $adif =     $adif->toAdif($data, $this->version, false, true);
             file_put_contents($file, $adif);
-            PS::_print("  <B>" . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". <Y>{$fn} <G>migrated\n");
+            prt("  <B>" . str_pad($count, 3, ' ', STR_PAD_LEFT) . ". <Y>{$fn} <G>migrated\n");
         }
-        PS::_print("<RESET>");
+        prt("<RESET>");
     }
 
 
@@ -1289,14 +1274,14 @@ class PS {
         $MGs1 =     $this->dataCountMissingGsq($data);
         $locs =     $this->dataGetLocations($data);
 
-        PS::_print(static::showStats($data, $date)
+        prt(static::showStats($data, $date)
             . static::showLogs($data, $date)
             . "<Y>PENDING OPERATION:\n<G>"
             . "  - Archive log file <B>{$this->fileAdifWsjtx} <G>to <B>{$this->fileAdifPark}<G>\n"
         );
 
         if (count($locs) > 1) {
-            PS::_print("<R>\nERROR:\n  * There are <Y>" . count($locs) . " <R>named log locations contained within this one file:\n"
+            prt("<R>\nERROR:\n  * There are <Y>" . count($locs) . " <R>named log locations contained within this one file:\n"
                 . "<C>    - " . implode("\n<R>    - <C>", $locs) . "\n<R>"
                 . "  * Manual intervention is required.\n"
                 . "  * The operation has been cancelled.\n"
@@ -1304,20 +1289,20 @@ class PS {
             );
             return;
         }
-        PS::_print(($this->qrzApiKey ?           "  - Upload park log to <Y>Clublog.org\n<G>" : "")
+        prt(($this->qrzApiKey ?           "  - Upload park log to <Y>Clublog.org\n<G>" : "")
             . ($this->clublogCheck() ?      "  - Upload park log to <Y>QRZ.com\n<G>" : "")
-            . ($this->sessionAdifDirectory ?"  - Save " . PS::BLUE_BD . "Session log file" . PS::GREEN_BD . "\n" : "")
+            . ($this->sessionAdifDirectory ?"  - Save <B>Session log file<G>\n" : "")
             . "\n"
             . (
                 ($this->lookupProgram === 'POTA' && $logs < PS::ACTIVATION_LOGS_POTA) ||
                 ($this->lookupProgram === 'WWFF' && $logs < PS::ACTIVATION_LOGS_WWFF)
-                ? PS::RED_BD ."WARNING:\n    There are insufficient logs for successful activation.\n\n" . PS::GREEN_BD
+                ? "<R>WARNING:\n    There are insufficient logs for successful activation.\n\n"
                 : ""
             )
         );
 
         if (isset($locs[0]) && trim(substr($locs[0], 0, 14)) !== trim(substr($this->locationNameAbbr, 0, 14))) {
-            PS::_print("<R>ERROR:\n"
+            prt("<R>ERROR:\n"
                 . "  * The log contains reports made at      <B>{$locs[0]}\n<R>"
                 . "  * You indicate that your logs were from <B>{$this->locationNameAbbr}\n<R>"
                 . "  * The operation has been cancelled.\n<RESET>"
@@ -1325,13 +1310,13 @@ class PS {
             return;
         }
 
-        PS::_print(PS::YELLOW_BD . "<Y>CHOICE:\n<G>    Proceed with operation? (Y/N) ");
+        prt("<Y>CHOICE:\n<G>    Proceed with operation? (Y/N) ");
 
         $fin = fopen("php://stdin","r");
         $response = strToUpper(trim(fgets($fin)));
-        PS::_print("\n<Y>RESULT:\n<G>");
+        prt("\n<Y>RESULT:\n<G>");
         if (strtoupper($response) !== 'Y') {
-            PS::_print("    Operation cancelled.\n<RESET>");
+            prt("    Operation cancelled.\n<RESET>");
             return;
         }
         $filename = $this->pathAdifLocal . $this->fileAdifPark;
@@ -1353,7 +1338,7 @@ class PS {
         }
         $adif =     $adif->toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        PS::_print("  - Archived log file <B>{$this->fileAdifWsjtx} <G>to <B>{$this->fileAdifPark}<G>.\n"
+        prt("  - Archived log file <B>{$this->fileAdifWsjtx} <G>to <B>{$this->fileAdifPark}<G>.\n"
             . "  - Updated <M>MY_GRIDSQUARE <G>values     to <C>{$this->inputGSQ}<G>.\n"
             . "  - Added <M>MY_CITY <G>and set all values to <CY>{$this->locationNameAbbr}<G>.\n"
             . (!empty($this->qrzSession) && $status['GRIDSQUARE']['missing'] ? "  - Obtained <C>"
@@ -1370,15 +1355,15 @@ class PS {
             . "\n"
         );
         if ($this->lookupProgram === 'POTA') {
-            PS::_print("<Y>CLOSE SPOT:\n<G>    Would you like to close this spot on pota.app (Y/N)     <B>");
+            prt("<Y>CLOSE SPOT:\n<G>    Would you like to close this spot on pota.app (Y/N)     <B>");
             $fin = fopen("php://stdin", "r");
             $response = strToUpper(trim(fgets($fin)));
 
             if ($response === 'Y') {
-                PS::_print("<G>    Please enter frequency in KHz:                          <M>");
+                prt("<G>    Please enter frequency in KHz:                          <M>");
                 $this->spotKhz = trim(fgets($fin));
 
-                PS::_print("<G>    Enter comment - e.g. QRT - moving to CA-1234            <R>");
+                prt("<G>    Enter comment - e.g. QRT - moving to CA-1234            <R>");
                 $this->spotComment = trim(fgets($fin));
 
                 $this->processParkSpot();
@@ -1387,7 +1372,7 @@ class PS {
 
         PS::wsjtxUpdateInifile($this->qrzApiCallsign, $this->inputGSQ);
 
-        PS::_print("\n<Y>NEXT STEP:\n<G>"
+        prt("\n<Y>NEXT STEP:\n<G>"
             . "  - You should now restart WSJT-X before logging at another park, where\n"
             . "    a fresh <B>{$this->fileAdifWsjtx} <G>file will be created.\n"
             . "  - Alternatively, run this script again with a new Location ID to resume\n"
@@ -1409,7 +1394,7 @@ class PS {
         $MGs =      $this->dataCountMissingGsq($data);
         $locs =     $this->dataGetLocations($data);
 
-        PS::_print("<G>  - File <B>{$fileAdif} <G>exists and contains <C>" . count($data) . " <G>entries.\n"
+        prt("<G>  - File <B>{$fileAdif} <G>exists and contains <C>" . count($data) . " <G>entries.\n"
             . ($MGs ? "  - There are <R>{$MGs} <G>missing gridsquares\n" : "")
             . static::showStats($data, $date, $band)
             . ($showLogs ? static::showLogs($data, $date, $band) : "")
@@ -1466,14 +1451,14 @@ class PS {
         }
         $adif = adif::toAdif($data, $this->version, false, true);
         file_put_contents($filename, $adif);
-        PS::_print($resCL . $resQrz . $resSave . "<RESET>\n");
+        prt($resCL . $resQrz . $resSave . "<RESET>\n");
     }
 
     private function processParkSpot() {
         $activator = ($this->inputQthId === 'K-TEST' ? 'ABC123' : $this->qrzLogin);
         $comment = $this->spotComment . ($this->lookupAltLocId ? ' | ' .$this->lookupLocId . ' / ' . $this->lookupAltLocId : '');
         $linelen = 44 + strlen($comment);
-        PS::_print("\n<Y>PENDING OPERATION:\n"
+        prt("\n<Y>PENDING OPERATION:\n"
             . "<G>    The following spot will be published at pota.app:\n\n"
             . "<W>     Activator  Spotter    KHz      Park Ref   Comments\n"
             . "    " . str_repeat('-', $linelen) . "\n"
@@ -1490,41 +1475,41 @@ class PS {
         $fin = fopen("php://stdin","r");
         $response = strToUpper(trim(fgets($fin)));
         if ($response !== 'Y') {
-            PS::_print("\n<Y>RESULT:\n<G>    Spot has NOT been published.\n<RESET");
+            prt("\n<Y>RESULT:\n<G>    Spot has NOT been published.\n<RESET");
             return false;
         }
         $result = $this->potaPublishSpot();
         if ($result === true) {
-            PS::_print("\n<Y>RESULT:\n<G>"
+            prt("\n<Y>RESULT:\n<G>"
                 . "  - Your spot at <B>{$this->inputQthId} <G>on <M>{$this->spotKhz} KHz<G>"
                 . " has been published on <Y>pota.app <G>as <R>\"{$comment}\"\n<RESET>"
             );
             return true;
         }
-        PS::_print("\n<R>ERROR:\n  - An error occurred when trying to publish your spot:\n    <B>{$result}\n<RESET>");
+        prt("\n<R>ERROR:\n  - An error occurred when trying to publish your spot:\n    <B>{$result}\n<RESET>");
         return false;
     }
 
     private function processParkInitialise() {
         PS::wsjtxUpdateInifile($this->qrzApiCallsign, $this->inputGSQ);
 
-        PS::_print("<G>  - This is a first time visit, since neither <B>{$this->fileAdifPark} <G>nor <B>{$this->fileAdifWsjtx} <G>exist.\n\n");
+        prt("<G>  - This is a first time visit, since neither <B>{$this->fileAdifPark} <G>nor <B>{$this->fileAdifWsjtx} <G>exist.\n\n");
 
         if ($this->lookupProgram === 'POTA') {
-            PS::_print("<Y>PUBLISH SPOT:\n<G>    Would you like to publish this spot to pota.app (Y/N)   <B>");
+            prt("<Y>PUBLISH SPOT:\n<G>    Would you like to publish this spot to pota.app (Y/N)   <B>");
             $fin = fopen("php://stdin","r");
             $response = strToUpper(trim(fgets($fin)));
             if ($response === 'Y') {
-                PS::_print("<G>    Please enter frequency in KHz:                          <M>");
+                prt("<G>    Please enter frequency in KHz:                          <M>");
                 $this->spotKhz = trim(fgets($fin));
 
-                PS::_print("<G>    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   <B>");
+                prt("<G>    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   <B>");
                 $this->spotComment = trim(fgets($fin));
 
                 $this->processParkSpot();
             }
         }
-        PS::_print( "\n<Y>NEXT STEP:\n<G>"
+        prt( "\n<Y>NEXT STEP:\n<G>"
             . "  - Please restart WSJT-X if you were logging at another park to allow <B>{$this->fileAdifWsjtx} <G>to be created.<RESET>\n");
     }
 
@@ -1535,18 +1520,18 @@ class PS {
         $data = $adif->parser();
         $locs =     $this->dataGetLocations($data);
 
-        PS::_print("<G>  - File <B>{$this->fileAdifPark} <G>exists and contains <M>" . count($data) . " <G>entries.\n"
+        prt("<G>  - File <B>{$this->fileAdifPark} <G>exists and contains <M>" . count($data) . " <G>entries.\n"
             . "  - File <B>{$this->fileAdifWsjtx}<G> does NOT exist.\n\n"
         );
         if (count($locs) > 1) {
-            PS::_print("<R>ERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
+            prt("<R>ERROR:\n  * There are " . count($locs) . " named log locations contained within this one file:\n"
                 . "    - " . implode("\n    - ", $locs) . "\n"
                 . "  * Manual intervention is required.\n"
                 . "  * The operation has been cancelled.\n<RESET>"
             );
             return;
         }
-        PS::_print("<Y>PENDING OPERATION:\n"
+        prt("<Y>PENDING OPERATION:\n"
             . "<G>  - Rename archived log file <B>{$this->fileAdifPark} <G>to <B>{$this->fileAdifWsjtx}<G>\n"
             . "  - Resume logging at park <R>{$this->locationName}\n\n"
             . "<Y>CHOICE:\n<G>    Continue with operation? (Y/N) "
@@ -1554,38 +1539,38 @@ class PS {
         $fin = fopen("php://stdin","r");
         $response = strToUpper(trim(fgets($fin)));
 
-        PS::_print("\n<Y>RESULT:\n<G>");
+        prt("\n<Y>RESULT:\n<G>");
 
         if ($response === 'Y') {
             rename(
                 $this->pathAdifLocal . $this->fileAdifPark,
                 $this->pathAdifLocal . $this->fileAdifWsjtx
             );
-            PS::_print( "    Renamed archived log file <B>{$this->fileAdifPark} <G>to <B>{$this->fileAdifWsjtx}\n\n");
+            prt( "    Renamed archived log file <B>{$this->fileAdifPark} <G>to <B>{$this->fileAdifWsjtx}\n\n");
             if ($this->lookupProgram === 'POTA') {
-                PS::_print("<Y>PUBLISH SPOT:\n<G>    Would you like to publish this spot to pota.app (Y/N)   <B>");
+                prt("<Y>PUBLISH SPOT:\n<G>    Would you like to publish this spot to pota.app (Y/N)   <B>");
                 $fin = fopen("php://stdin", "r");
                 $response = strToUpper(trim(fgets($fin)));
                 if ($response === 'Y') {
-                    PS::_print("<G>    Please enter frequency in KHz:                          <M>");
+                    prt("<G>    Please enter frequency in KHz:                          <M>");
                     $this->spotKhz = trim(fgets($fin));
 
-                    PS::_print("<G>    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   <R>");
+                    prt("<G>    Enter a comment, starting with mode e.g. \"FT8 QRP 5w\"   <R>");
                     $this->spotComment = trim(fgets($fin));
 
                     $this->processParkSpot();
                 }
             }
-            PS::_print("\n<Y>NEXT STEP:\n<G>    You may resume logging at <R>{$this->locationName}\n\n");
+            prt("\n<Y>NEXT STEP:\n<G>    You may resume logging at <R>{$this->locationName}\n\n");
         } else {
-            PS::_print( "    Operation cancelled.\n");
+            prt( "    Operation cancelled.\n");
         }
-        PS::_print("<RESET>");
+        prt("<RESET>");
     }
 
     private function qrzCheck() {
         if (empty($this->qrzLogin) || empty($this->qrzPass)) {
-            PS::_print("<R>WARNING:\n"
+            prt("<R>WARNING:\n"
                 . "  QRZ.com credentials were not found in <B>potashell.ini<R>.\n"
                 . "  Missing GSQ values for logged contacts cannot be fixed without\n"
                 . "  valid QRZ credentials.\n<RESET>"
@@ -1604,7 +1589,7 @@ class PS {
         $xml = file_get_contents($url, false, $this->HTTPcontext);
         $data = simplexml_load_string($xml);
         if (!empty($data->Session->Error)) {
-            PS::_print("<R>ERROR:\n"
+            prt("<R>ERROR:\n"
                 . "  QRZ.com reports <B>\"" . trim($data->Session->Error) . "\"<R>\n"
                 . "  Missing GSQ values for logged contacts cannot be fixed without\n"
                 . "  valid QRZ credentials.\n<RESET>"
@@ -1612,14 +1597,14 @@ class PS {
             die(0);
         }
         if (empty($data->Session->Key)) {
-            PS::_print("<R>ERROR:\n  QRZ.com reports an invalid session key, so automatic log uploads are possible at this time.\n\n"
+            prt("<R>ERROR:\n  QRZ.com reports an invalid session key, so automatic log uploads are possible at this time.\n\n"
                 . "  Missing GSQ values for logged contacts cannot be fixed without valid QRZ credentials.\n\n<RESET>"
             );
             return false;
         }
         $this->qrzSession = $data->Session->Key;
         if (empty($this->qrzApiKey)) {
-            PS::_print("<R>WARNING:\n"
+            prt("<R>WARNING:\n"
                 . "  QRZ.com <B>[QRZ]apikey <R>is missing in <B>potashell.ini<R>.\n"
                 . "  Without a valid XML Subscriber apikey, you won't be able to automatically upload\n"
                 . "  archived logs to QRZ.com.\n\n<RESET>"
@@ -1633,7 +1618,7 @@ class PS {
             );
             $raw = file_get_contents($url);
         } catch (\Exception $e) {
-            PS::_print("<R>WARNING:\n  Unable to connect to QRZ.com for log uploads: <B>" . $e->getMessage() . "<R>.\n\n<RESET>");
+            prt("<R>WARNING:\n  Unable to connect to QRZ.com for log uploads: <B>" . $e->getMessage() . "<R>.\n\n<RESET>");
             die(0);
         }
         $status = [];
@@ -1644,7 +1629,7 @@ class PS {
         }
         if ($status['RESULT'] === 'OK') {
             if (strtoupper($status['CALLSIGN']) !== strtoupper($this->qrzApiCallsign)) {
-                PS::_print("<R>ERROR:\n  Unable to connect to QRZ.com for log uploads:\n<B>  - Wrong callsign for [QRZ]apikey\n<RESET>");
+                prt("<R>ERROR:\n  Unable to connect to QRZ.com for log uploads:\n<B>  - Wrong callsign for [QRZ]apikey\n<RESET>");
                 die(0);
             }
             return true;
@@ -1652,11 +1637,11 @@ class PS {
 
         if (isset($status['REASON'])) {
             if (strpos($status['REASON'], 'invalid api key') !== false) {
-                PS::_print("<R>ERROR:\n  Unable to connect to QRZ.com for log uploads:\n<B>  - Invalid QRZ Key\n<RESET>");
+                prt("<R>ERROR:\n  Unable to connect to QRZ.com for log uploads:\n<B>  - Invalid QRZ Key\n<RESET>");
                 die(0);
             }
             if (strpos($status['REASON'], 'user does not have a valid QRZ subscription') !== false) {
-                PS::_print("<R>ERROR:\n  Unable to connect to QRZ.com for log uploads:\n<B>  - Not XML Subscriber\n\n<RESET>");
+                prt("<R>ERROR:\n  Unable to connect to QRZ.com for log uploads:\n<B>  - Not XML Subscriber\n\n<RESET>");
                 die(0);
             }
         }
@@ -1684,7 +1669,7 @@ class PS {
     private function qrzGetGSQForCall($callsign) {
         $data = $this->qrzGetInfoForCall($callsign);
         if (empty($data->Callsign->grid)) {
-            PS::_print("<R>    WARNING: No gridsquare found at QRZ.com for callsign <B>{$callsign}\n<RESET>");
+            prt("<R>    WARNING: No gridsquare found at QRZ.com for callsign <B>{$callsign}\n<RESET>");
             return null;
         }
         return (string) $data->Callsign->grid;
@@ -1693,7 +1678,7 @@ class PS {
     private function qrzGetItuForCall($callsign) {
         $data = $this->qrzGetInfoForCall($callsign);
         if (empty($data->Callsign->country)) {
-            PS::_print("<R>    WARNING: No country found at <Y>QRZ.com <R>for callsign <B>{$callsign}\n<RESET>");
+            prt("<R>    WARNING: No country found at <Y>QRZ.com <R>for callsign <B>{$callsign}\n<RESET>");
             return null;
         }
         return (string) $data->Callsign->country;
@@ -1733,7 +1718,7 @@ class PS {
                 );
                 $raw = file_get_contents($url);
             } catch (\Exception $e) {
-                PS::_print("<R>WARNING:\n  Unable to connect to <Y>QRZ.com <R>for log uploads:\n<B>" . $e->getMessage() . ".\n\n<RESET>");
+                prt("<R>WARNING:\n  Unable to connect to <Y>QRZ.com <R>for log uploads:\n<B>" . $e->getMessage() . ".\n\n<RESET>");
                 die(0);
             }
             $status = [];
@@ -1755,7 +1740,7 @@ class PS {
                         $stats['WRONG_CALL']++;
                         $record['TO_QRZ'] = 'Wrong Callsign';
                     } else {
-                        PS::_print("{$status['REASON']}\n");
+                        prt("{$status['REASON']}\n");
                         $stats['ERROR']++;
                         $record['TO_QRZ'] = $status['REASON'];
                     }
@@ -1771,12 +1756,12 @@ class PS {
     }
 
     private function showHeader() {
-        $name = 'POTA SHELL  ' . $this->version;
-        PS::_print(PS::CLS . PS::YELLOW
-            . str_repeat('*', strlen($name) + 4) . "\n"
-            . '* ' . PS::YELLOW_BD . 'POTA SHELL  ' . PS::GREEN_BD . $this->version . PS::YELLOW . " *\n"
-            . '* ' . PS::YELLOW_BD . 'PHP         ' . PS::GREEN_BD . str_pad($this->php, strlen($this->version), ' ', STR_PAD_LEFT) . PS::YELLOW . " *\n"
-            . str_repeat('*', strlen($name) + 4) . "\n\n"
+        $name = "POTA SHELL  {$this->version}";
+        $line = str_repeat('*', strlen($name) + 4);
+        prt("<CLS><Y>{$line}\n"
+            . "* <Y>POTA SHELL  <G>{$this->version}<Y> *\n"
+            . "* <Y>PHP         <G>" . str_pad($this->php, strlen($this->version), ' ', STR_PAD_LEFT). "<Y> *\n"
+            . "{$line}\n\n"
         );
     }
 
@@ -1918,54 +1903,55 @@ class PS {
         $columns[0]['len'] = strlen('' . (1 + count($logs)));
         $num = str_repeat(' ', max(2, strlen(number_format(count($logs))))) . '#';
         $header = [$num];
-        $header_bd = [PS::CYAN_BD . $num . PS::GREEN];
+        $header_bd = ["<C>$num<G>"];
         foreach ($columns as &$column) {
             if ($column['src'] === false) {
                 continue;
             }
             $header[] = str_pad($column['label'], $column['len']);
-            $header_bd[] = PS::CYAN_BD . str_pad($column['label'], $column['len']) . PS::GREEN;
+            $header_bd[] = "<C>" . str_pad($column['label'], $column['len']) . "<G>";
         }
         $head =     implode(' | ', $header);
         $head_bd =  implode(' | ', $header_bd);
         $rows = [];
         foreach ($logs as $i => $log) {
-            $row = [PS::YELLOW_BD . str_pad( '' . ($i + 1), $columns[0]['len'], ' ', STR_PAD_LEFT) . PS::GREEN];
+            $row = ["<Y>" . str_pad( '' . ($i + 1), $columns[0]['len'], ' ', STR_PAD_LEFT) . "<G>"];
             foreach ($columns as &$column) {
                 if ($column['src'] === false) {
                     continue;
                 }
                 switch($column['src']) {
                     case '_':
-                        $row[] = PS::YELLOW
+                        $row[] = "<Y>"
                             . (isset($log['TO_CLUBLOG']) ? ($log['TO_CLUBLOG'] === 'Y' ? 'C' : ' ') : ' ') . ' '
                             . (isset($log['TO_QRZ']) ?     ($log['TO_QRZ'] === 'Y' ?     'Q' : ' ') : ' ') . ' '
                             . (isset($log['TO_POTA']) ?    ($log['TO_POTA'] === 'Y' ?    'P' : ' ') : ' ') . ' '
                             . (isset($log['TO_WWFF']) ?    ($log['TO_WWFF'] === 'Y' ?    'W' : ' ') : ' ') . ' '
-                            . PS::GREEN;
+                            . "<G>";
                         break;
                     case 'DX':
-                        $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len'], " ", STR_PAD_LEFT) . PS::GREEN;
+                        $row[] = "<C>" . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len'], " ", STR_PAD_LEFT) . "<G>";
                         break;
                     default:
-                        $row[] = PS::CYAN . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len']) . PS::GREEN;
+                        $row[] = "<C>" . str_pad((isset($log[$column['src']]) ? $log[$column['src']] : ''), $column['len']) . "<G>";
                         break;
                 }
             }
             $rows[] = implode(' | ', $row);
         }
+        $line = str_repeat('-', strlen($head) + 1);
         return
-            PS::YELLOW_BD . "LOGS:" . str_repeat(' ', strlen($head) - 74)
-            . PS::CYAN_BD . "UPLOAD" . PS::GREEN . " = Uploaded logs to "
-            . PS::YELLOW . "C" . PS::GREEN . "-Clublog, "
-            . PS::YELLOW . "Q" . PS::GREEN . "-QRZ, "
-            . PS::YELLOW . "P" . PS::GREEN . "-POTA File, "
-            . PS::YELLOW . "W" . PS::GREEN . "-WWFF File.\n"
-            . str_repeat('-', strlen($head) + 1) . "\n"
+            "<Y>LOGS:" . str_repeat(' ', strlen($head) - 74)
+            . "<C>UPLOAD <G>= Uploaded logs to "
+            . "<Y>C<G>-Clublog, "
+            . "<Y>Q<G>-QRZ, "
+            . "<Y>P<G>-POTA File, "
+            . "<Y>W<G>-WWFF File.\n"
+            . "$line\n"
             . $head_bd . "\n"
-            . str_repeat('-', strlen($head) + 1) . "\n"
+            . "$line\n"
             . " " . implode("\n ", $rows) . "\n"
-            . str_repeat('-', strlen($head) + 1) . "\n"
+            . "$line\n"
             . "\n";
     }
 
@@ -2006,8 +1992,7 @@ class PS {
                   "      - " . (count($countries) === 1 ? "Country:  " : "Countries:") . "  <Y>"
                 . implode("<G>, <Y>", $countries) . "<G>\n"
                 . (count($states) ?
-                      "      - " . (count($states) === 1 ? "State: ": "States:") . "     "
-                    . PS::YELLOW_BD . implode("<G>, <Y>", $states) . "<G>\n"
+                      "      - " . (count($states) === 1 ? "State: ": "States:") . "     <Y>" . implode("<G>, <Y>", $states) . "<G>\n"
                 : ""
                 )
                 . "\n"
@@ -2044,18 +2029,18 @@ class PS {
                     $this->showSyntax(1) . "\n"
                     . $this->showSyntax(2) . "\n"
                     . $this->showSyntax(3) . "\n"
-                    . $this->showSyntax(4) . PS::RESET;
+                    . $this->showSyntax(4) . "<RESET>";
         }
     }
 
     private function wsjtxUpdateInifile($call, $gsq) {
         $filename = rtrim($this->config['WSJTX']['log_directory'],'\\/') . DIRECTORY_SEPARATOR . 'WSJT-X.ini';
         if (!$wsjtxIniConfig = PS::parse_ini($filename, true)) {
-            PS::_print("<R>ERROR:\n  Unable to parse <B>{$filename} <R> file.\n\n<RESET>");
+            prt("<R>ERROR:\n  Unable to parse <B>{$filename} <R> file.\n\n<RESET>");
             die(0);
         };
         if (!isset($wsjtxIniConfig['Configuration']['MyCall']) || !isset($wsjtxIniConfig['Configuration']['MyGrid'])) {
-            PS::_print("<R>ERROR:\n  Unable to read values for <C>MyCall <R>and <C>MyGrid <R>in <C>Configuration <R>section of\n"
+            prt("<R>ERROR:\n  Unable to read values for <C>MyCall <R>and <C>MyGrid <R>in <C>Configuration <R>section of\n"
                 . "  <B>{$filename}\n\n<RESET>"
             );
             die(0);
@@ -2541,6 +2526,12 @@ class Logbook {
         return $tmp;
     }
 
+}
+
+function prt($text) {
+    $subs = PS::TEXTSUBS;
+    $subs['<--->'] = str_repeat('-', PS::MAXLEN);
+    print strtr($text, $subs);
 }
 
 function d($var) {
