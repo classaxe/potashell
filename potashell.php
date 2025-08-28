@@ -61,6 +61,8 @@ class PS {
     const RESPONSE_Y =  "\e[0;33;1;42m Y \e[0;33m";
     const RESPONSE_N =  "\e[0;33;1;41m N \e[0;33m";
     const CLS =         "\e[H\e[J";
+    const INVERSE =     "\e[7m";
+    const NORMAL =      "\e[27m";
     const RESET =       "\e[0m";
 
     const NAME_SUBS = [
@@ -99,6 +101,8 @@ class PS {
         '<w>' =>        PS::WHITE,
         '<W>' =>        PS::WHITE_BD,
         '<CLS>' =>      PS::CLS,
+        '<INVERSE>' =>  PS::INVERSE,
+        '<NORMAL>' =>   PS::NORMAL,
         '<RESET>' =>    PS::RESET,
         '<RESP_Y>' =>   PS::RESPONSE_Y,
         '<RESP_N>' =>   PS::RESPONSE_N,
@@ -110,6 +114,25 @@ class PS {
         '[POTA_REQ]' => PS::YELLOW_BD . PS::ACTIVATION_LOGS_POTA . PS::GREEN_BD,
         '[WWFF_REQ]' => PS::YELLOW_BD . PS::ACTIVATION_LOGS_WWFF . PS::GREEN_BD,
     ];
+
+    const COLUMNS_AUDIT = [
+            'QTH ID' =>     ['color' => '<B>',  'len' => 9,    'pad' => 'r',    'source' => 'qthId',        'help' => ''],
+            'ALT ID' =>     ['color' => '<Y>',  'len' => 9,    'pad' => 'r',    'source' => 'qthIdAlt',     'help' => ''],
+            'MY_GRID' =>    ['color' => '<C>',  'len' => 10,   'pad' => 'r',    'source' => 'myGsqFmt',     'help' => ''],
+            'MY_CALL' =>    ['color' => '<M>',  'len' => 10,   'pad' => 'r',    'source' => 'myCallsign',   'help' => ''],
+            'LATEST LOG' => ['color' => '<W>',  'len' => 10,   'pad' => 'r',    'source' => 'dateFmt',      'help' => ''],
+            '#LT' =>        ['color' => '<Y>',  'len' => 3,    'pad' => 'r',    'source' => 'count_LT',     'help' => 'Logs in Total - [WWFF_REQ] required for WWFF activation'],
+            '#ST' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_ST',     'help' => 'Sessions in Total'],
+            '#SA' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_AT',     'help' => 'Successful Activations'],
+            '#FA' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_FA',     'help' => 'Failed Activations'],
+            '#MG' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_MG',     'help' => 'Missing Grid Squares'],
+            '#LS' =>        ['color' => '<Y>',  'len' => 3,    'pad' => 'r',    'source' => 'count_LS',     'help' => 'Logs in Latest Session - [POTA_REQ] required for POTA activation'],
+            '#B' =>         ['color' => '',     'len' => 2,    'pad' => 'r',    'source' => 'count_BT',     'help' => 'Number of bands'],
+            'DX KM' =>      ['color' => '<c>',  'len' => 6,    'pad' => 'l',    'source' => 'bestDx',       'help' => 'Best Distance in KM'],
+            'UPLOAD' =>     ['color' => '<y>',  'len' => 7,    'pad' => 'r',    'source' => 'uploadStatus', 'help' => 'Uploaded logs to [C]-Clublog, [Q]-QRZ, [P]-POTA  session export file, [W]-WWFF session export file'],
+            'Park Name' =>  ['color' => '<B>',  'len' => 10,   'pad' => 'r',    'source' => 'myCity',       'help' => ''],
+        ];
+
 
     private $argCheckBand;
     private $config;
@@ -215,6 +238,9 @@ class PS {
         $this->modeSyntax = false;
         if ($arg1 && strtoupper($arg1) === 'AUDIT') {
             $this->modeAudit = true;
+            if ($arg2 && in_array($arg2, array_keys(PS::COLUMNS_AUDIT))) {
+                $this->sortBy = $arg2;
+            }
             return;
         }
         if ($arg1 && strtoupper($arg1) === 'EXPORT') {
@@ -1104,29 +1130,13 @@ class PS {
             $logbooks[] = $logbook;
             $count[$logbook->program]++;
         }
-        if ($this->sortBy) {
-
-        }
-        $columns = [
-            'QTH ID' =>     ['color' => '<B>',  'len' => 9,    'pad' => 'r',    'source' => 'qthId',        'help' => ''],
-            'ALT ID' =>     ['color' => '<Y>',  'len' => 9,    'pad' => 'r',    'source' => 'qthIdAlt',     'help' => ''],
-            'MY_GRID' =>    ['color' => '<C>',  'len' => 10,   'pad' => 'r',    'source' => 'myGsqFmt',     'help' => ''],
-            'MY_CALL' =>    ['color' => '<M>',  'len' => 10,   'pad' => 'r',    'source' => 'myCallsign',   'help' => ''],
-            'LATEST LOG' => ['color' => '<W>',  'len' => 10,   'pad' => 'r',    'source' => 'dateFmt',      'help' => ''],
-            '#LT' =>        ['color' => '<Y>',  'len' => 3,    'pad' => 'r',    'source' => 'count_LT',     'help' => 'Logs in Total - [WWFF_REQ] required for WWFF activation'],
-            '#ST' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_ST',     'help' => 'Sessions in Total'],
-            '#SA' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_AT',     'help' => 'Successful Activations'],
-            '#FA' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_FA',     'help' => 'Failed Activations'],
-            '#MG' =>        ['color' => '',     'len' => 3,    'pad' => 'r',    'source' => 'count_MG',     'help' => 'Missing Grid Squares'],
-            '#LS' =>        ['color' => '<Y>',  'len' => 3,    'pad' => 'r',    'source' => 'count_LS',     'help' => 'Logs in Latest Session - [POTA_REQ] required for POTA activation'],
-            '#B' =>         ['color' => '',     'len' => 2,    'pad' => 'r',    'source' => 'count_BT',     'help' => 'Number of bands'],
-            'DX KM' =>      ['color' => '<c>',  'len' => 6,    'pad' => 'l',    'source' => 'bestDx',       'help' => 'Best Distance in KM'],
-            'UPLOAD' =>     ['color' => '<y>',  'len' => 7,    'pad' => 'r',    'source' => 'uploadStatus', 'help' => 'Uploaded logs to [C]-Clublog, [Q]-QRZ, [P]-POTA  session export file, [W]-WWFF session export file'],
-            'Park Name' =>  ['color' => '<B>',  'len' => 10,   'pad' => 'r',    'source' => 'myCity',       'help' => ''],
-        ];
         $cols = [];
-        foreach ($columns as $k => $v) {
-            $cols[] = str_pad($k, $v['len'], ' ', $v['pad'] === 'l' ? STR_PAD_LEFT : STR_PAD_RIGHT);
+        foreach (PS::COLUMNS_AUDIT as $k => $v) {
+            $col = str_pad($k, $v['len'], ' ', $v['pad'] === 'l' ? STR_PAD_LEFT : STR_PAD_RIGHT);
+            if ($this->sortBy === $k) {
+                $col = "<INVERSE>{$col}<NORMAL>";
+            }
+            $cols[] = $col;
         }
         $cols = implode(' <G>|<C> ', $cols);
         $stats = [];
@@ -1137,9 +1147,11 @@ class PS {
         }
 
         $out = "<Y>STATUS:\n"
-            ."<G>Performing Audit on all location Log files in <B>{$this->pathAdifLocal}\n\n"
-            ."<Y>KEY:\n";
-        foreach ($columns as $k => $v) {
+            . "  <G>Performing Audit on all location Log files in <B>{$this->pathAdifLocal}\n"
+            . ($this->sortBy ? "  <G>Results sorted by <C><INVERSE> {$this->sortBy} <NORMAL>\n" : "")
+            . "\n"
+            . "<Y>KEY:\n";
+        foreach (PS::COLUMNS_AUDIT as $k => $v) {
             if (!$v['help']) {
                 continue;
             }
@@ -1150,9 +1162,18 @@ class PS {
             . "<C>" . $cols . "<G>\n"
             . "<--->\n";
 
+        if ($this->sortBy) {
+            usort($logbooks, function($a, $b) {
+                if ($a->{PS::COLUMNS_AUDIT[$this->sortBy]['source']} === $b->{PS::COLUMNS_AUDIT[$this->sortBy]['source']}) {
+                    return 0;
+                }
+                return ($a->{PS::COLUMNS_AUDIT[$this->sortBy]['source']} < $b->{PS::COLUMNS_AUDIT[$this->sortBy]['source']}) ? -1 : 1;
+            });
+        }
         foreach ($logbooks as $l) {
             $line = [];
-            foreach ($columns as $k => $v) {
+            // d($l);
+            foreach (PS::COLUMNS_AUDIT as $k => $v) {
                 $color = $v['color'];
                 $value = $l->{$v['source']};
                 switch ($k) {
