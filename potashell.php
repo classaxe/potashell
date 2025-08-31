@@ -143,6 +143,7 @@ class PS {
     private $customLocations;
     private $fileAdifPark;
     private $fileAdifWsjtx;
+    private $filterBy;
     private $hasInternet = false;
     private $inputGSQ;
     private $inputQthId;
@@ -238,8 +239,17 @@ class PS {
         $this->modeSyntax = false;
         if ($arg1 && strtoupper($arg1) === 'AUDIT') {
             $this->modeAudit = true;
-            if ($arg2 && in_array($arg2, array_keys(PS::COLUMNS_AUDIT))) {
-                $this->sortBy = $arg2;
+            if ($arg2 == '-s' && in_array($arg3, array_keys(PS::COLUMNS_AUDIT))) {
+                $this->sortBy = $arg3;
+            }
+            if ($arg4 == '-s' && in_array($arg5, array_keys(PS::COLUMNS_AUDIT))) {
+                $this->sortBy = $arg5;
+            }
+            if ($arg2 == '-f') {
+                $this->filterBy = $arg3;
+            }
+            if ($arg4 == '-f') {
+                $this->filterBy = $arg5;
             }
             return;
         }
@@ -1097,6 +1107,7 @@ class PS {
     }
 
     private function processAudit() {
+        $test = false;
         $count = [
             'POTA' => 0,
             'WWFF' => 0,
@@ -1114,7 +1125,7 @@ class PS {
             if (!is_file($file)) {
                 continue;
             }
-            if ($i > 4) {
+            if ($test && $i > 4) {
                 continue;   // For development testing
             }
             $adif =     new adif($file);
@@ -1149,6 +1160,7 @@ class PS {
         $out = "<Y>STATUS:\n"
             . "  <G>Performing Audit on all location Log files in <B>{$this->pathAdifLocal}\n"
             . ($this->sortBy ? "  <G>Results sorted by <C><INVERSE> {$this->sortBy} <NORMAL>\n" : "")
+            . ($this->filterBy ? "  <G>Results filtered by <C>{$this->filterBy}\n" : "")
             . "\n"
             . "<Y>KEY:\n";
         foreach (PS::COLUMNS_AUDIT as $k => $v) {
@@ -1173,6 +1185,9 @@ class PS {
         foreach ($logbooks as $l) {
             $line = [];
             // d($l);
+            if ($this->filterBy && strpos($l->allText, $this->filterBy) === false) {
+                continue;
+            }
             foreach (PS::COLUMNS_AUDIT as $k => $v) {
                 $color = $v['color'];
                 $value = $l->{$v['source']};
@@ -2310,6 +2325,7 @@ class adif {
 }
 
 class Logbook {
+    public $allText = '';
     public $count_AT = 0;       // Activations Total
     public $count_BT = 0;       // Bands Total
     public $count_FA = 0;       // Failed Activations
@@ -2365,6 +2381,16 @@ class Logbook {
         } else {
             $this->program = $this->logs[0]['PROGRAM'];
         }
+        //dd(get_object_vars($this));
+        $this->allText = $this->dateFmt
+            . $this->program . ' '
+            . ' ' . $this->myGsqs[0]
+            . ' ' . $this->qthId
+            . ($this->qthIdAlt ? ' ' . $this->qthIdAlt : '')
+            . $this->myCallsign . ' '
+            . $this->myCity . ' '
+
+        ;
     }
 
     private static function dataCountActivations($data) {
